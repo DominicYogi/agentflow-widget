@@ -811,12 +811,26 @@
       return `Happy to help! 😊 Anything else you'd like me to handle?`;
     }
 
-    // Default — intelligent fallback
-    return `I understood: <em>"${message}"</em><br><br>
-      I'm not sure if that's a task or a question. Try being specific:<br>
-      • To act on the page: <em>"Approve all Gold plan"</em><br>
-      • To navigate: <em>"Open Members"</em><br>
-      • To ask: <em>"How many items are pending?"</em>`;
+    // Feelings / small talk
+    if (msg.match(/how are you|how r you|you good|you okay/)) {
+      return `I'm doing great, thanks for asking! 😄 Ready to help you work faster. What do you need?`;
+    }
+
+    if (msg.match(/what('?s| is) your name|who are you/)) {
+      return `I'm <strong>AgentFlow</strong> — your AI agent for <strong>${name}</strong>. I can process tasks, navigate the page, and answer questions. What can I do for you?`;
+    }
+
+    if (msg.match(/good morning|good afternoon|good evening|good night/)) {
+      const greeting = msg.includes("morning") ? "Good morning" : msg.includes("afternoon") ? "Good afternoon" : msg.includes("evening") ? "Good evening" : "Good night";
+      return `${greeting}! 👋 Ready when you are. There ${rowCount === 1 ? "is" : "are"} <strong>${rowCount} item${rowCount !== 1 ? "s" : ""}</strong> on the page right now.`;
+    }
+
+    if (msg.match(/okay|ok|sure|alright|got it|understood/)) {
+      return `Got it! Let me know when you need something.`;
+    }
+
+    // Default — just respond naturally, don't show instructions
+    return `I hear you! If you want me to take action, just tell me what to do — like <em>"approve all Gold plan"</em> or <em>"open Reports"</em>. Or ask me anything about what's on the page.`;
   }
 
   // ── Confirmation Dialog ─────────────────────────────────
