@@ -359,38 +359,29 @@
   function handleGeneralCommand(command) {
     const cmd = command.toLowerCase().trim();
 
-    // Navigate commands
-    const navPatterns = [
-      { pattern: /open|go to|navigate to|visit/, type: "navigate" },
-    ];
-
-    // Click commands — "click X", "press X", "tap X"
-    const clickMatch = cmd.match(/^(?:click|press|tap|select|hit)\s+(?:the\s+)?(.+)$/);
-    if (clickMatch) {
-      const target = clickMatch[1].trim();
-      return tryClickElement(target);
-    }
-
-    // Navigation — "open X page", "go to X"
-    const navMatch = cmd.match(/^(?:open|go to|navigate to|visit)\s+(?:the\s+)?(.+?)(?:\s+page)?$/);
-    if (navMatch) {
-      const target = navMatch[1].trim();
-      return tryNavigate(target);
-    }
-
-    // Fill commands — "fill X with Y", "type Y in X"
-    const fillMatch = cmd.match(/(?:fill|type|enter|input|put)\s+(.+?)\s+(?:in|into|with)\s+(.+)/);
-    if (fillMatch) {
-      return tryFill(fillMatch[2], fillMatch[1]);
-    }
-
     // Scroll commands
     if (cmd.includes("scroll down")) { window.scrollBy(0, 300); addMsg("action-approve", "⬇️ Scrolled down"); return true; }
     if (cmd.includes("scroll up")) { window.scrollBy(0, -300); addMsg("action-approve", "⬆️ Scrolled up"); return true; }
     if (cmd.includes("scroll to top")) { window.scrollTo(0, 0); addMsg("action-approve", "⬆️ Scrolled to top"); return true; }
     if (cmd.includes("scroll to bottom")) { window.scrollTo(0, document.body.scrollHeight); addMsg("action-approve", "⬇️ Scrolled to bottom"); return true; }
 
-    return false; // not handled
+    // Extract the target from natural language
+    // "open contact page", "can you open contact", "go to reports", "click members", "show me settings"
+    const navMatch = cmd.match(/(?:open(?:\s+up)?|go\s+to|navigate\s+to|visit|show(?:\s+me)?)\s+(?:the\s+|a\s+)?(.+?)(?:\s+page|\s+section|\s+tab)?$/);
+    const clickMatch = cmd.match(/(?:click|press|tap|select|hit)\s+(?:the\s+|on\s+)?(.+?)(?:\s+button|\s+link)?$/);
+    const fillMatch = cmd.match(/(?:fill|type|enter|input|put)\s+(.+?)\s+(?:in|into|with)\s+(.+)/);
+
+    if (fillMatch) return tryFill(fillMatch[2], fillMatch[1]);
+
+    const target = navMatch?.[1] || clickMatch?.[1];
+    if (target) {
+      const trimmed = target.trim();
+      // Try clicking a link or button matching the target
+      const found = tryClickElement(trimmed) || tryNavigate(trimmed);
+      return found;
+    }
+
+    return false;
   }
 
   function tryClickElement(targetText) {
@@ -663,19 +654,16 @@
     await routeCommand(command);
   }
 
-  // ── Command Router — decides what to do ────────────────
+  // ── Command Router ──────────────────────────────────────
   async function routeCommand(command) {
     const cmd = command.toLowerCase().trim();
 
-    // ── Is it a page action command? ──────────────────────
-    const isPageAction = (
-      cmd.match(/\b(approve|reject|escalate|flag|process|click|open|go to|navigate|scroll|fill|type|enter)\b/)
-    );
+    // Action keywords anywhere in the sentence
+    const actionWords = /\b(approve|reject|escalate|flag|process|click|open|go to|navigate|scroll|fill|type|enter|show|close|select|submit|press|tap)\b/;
 
-    if (isPageAction) {
+    if (actionWords.test(cmd)) {
       await processCommand(command);
     } else {
-      // ── Conversational — chat with AI ──────────────────
       await chat(command);
     }
   }
@@ -823,10 +811,14 @@
       thinking.remove();
 
       if (pendingRows.length === 0) {
-        // No table rows — try as a general page command
+        // No table rows — try as a general page command first
         const handled = handleGeneralCommand(command);
         if (!handled) {
-          await chat(command); // fall through to conversational AI
+          // Nothing matched — let chat handle it naturally
+          isProcessing = false;
+          document.getElementById("af-input").disabled = false;
+          document.getElementById("af-send").disabled = false;
+          await chat(command);
         }
         return;
       }
