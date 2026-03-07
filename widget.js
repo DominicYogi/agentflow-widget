@@ -1,7 +1,7 @@
 (function () {
 
   // ── Config ────────────────────────────────────────────
-  const BACKEND_URL = "https://nephological-commendatorily-edmund.ngrok-free.dev";
+  const BACKEND_URL = "http://localhost:3000";
   const API_KEY = document.currentScript?.getAttribute("data-api-key") || "af_live_medicare001";
   const THEME = document.currentScript?.getAttribute("data-theme") || "blue";
 
@@ -225,6 +225,29 @@
     #af-send:hover { background: ${theme.accent}; }
     #af-send:disabled { background: #ccc; cursor: not-allowed; }
 
+    #af-mic {
+      background: white;
+      color: #555;
+      border: 1px solid #ddd;
+      border-radius: 50%;
+      width: 38px; height: 38px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    #af-mic:hover { border-color: ${theme.primary}; color: ${theme.primary}; }
+    #af-mic:disabled { opacity: 0.4; cursor: not-allowed; }
+    #af-mic.listening {
+      background: #ff4444;
+      color: white;
+      border-color: #ff4444;
+      animation: af-pulse 1s infinite;
+    }
+
     #af-branding {
       text-align: center;
       font-size: 10px;
@@ -273,7 +296,8 @@
     </div>
     <div class="af-chips" id="af-chips"></div>
     <div id="af-input-area">
-      <input id="af-input" type="text" placeholder="Give me an instruction..." disabled />
+      <input id="af-input" type="text" placeholder="Say or type an instruction..." disabled />
+      <button id="af-mic" type="button" disabled title="Click to speak">🎤</button>
       <button id="af-send" type="button" disabled>➤</button>
     </div>
     <div id="af-branding">Powered by <a href="#">AgentFlow</a></div>
@@ -283,6 +307,164 @@
   // ── Toggle Panel ───────────────────────────────────────
   launcher.addEventListener("click", () => panel.classList.toggle("open"));
   document.getElementById("af-close").addEventListener("click", () => panel.classList.remove("open"));
+
+  // ── Voice Recognition ──────────────────────────────────
+  const micBtn = document.getElementById("af-mic");
+  let recognition = null;
+
+  if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => {
+      micBtn.classList.add("listening");
+      micBtn.title = "Listening...";
+      document.getElementById("af-input").placeholder = "Listening...";
+    };
+
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      document.getElementById("af-input").value = transcript;
+      micBtn.classList.remove("listening");
+      document.getElementById("af-input").placeholder = "Say or type an instruction...";
+      handleSend();
+    };
+
+    recognition.onerror = () => {
+      micBtn.classList.remove("listening");
+      document.getElementById("af-input").placeholder = "Say or type an instruction...";
+    };
+
+    recognition.onend = () => {
+      micBtn.classList.remove("listening");
+      document.getElementById("af-input").placeholder = "Say or type an instruction...";
+    };
+
+    micBtn.addEventListener("click", () => {
+      if (micBtn.classList.contains("listening")) {
+        recognition.stop();
+      } else {
+        recognition.start();
+      }
+    });
+  } else {
+    micBtn.title = "Voice not supported in this browser";
+    micBtn.style.opacity = "0.3";
+  }
+
+  // ── General Page Command Handler ───────────────────────
+  function handleGeneralCommand(command) {
+    const cmd = command.toLowerCase().trim();
+
+    // Navigate commands
+    const navPatterns = [
+      { pattern: /open|go to|navigate to|visit/, type: "navigate" },
+    ];
+
+    // Click commands — "click X", "press X", "tap X"
+    const clickMatch = cmd.match(/^(?:click|press|tap|select|hit)\s+(?:the\s+)?(.+)$/);
+    if (clickMatch) {
+      const target = clickMatch[1].trim();
+      return tryClickElement(target);
+    }
+
+    // Navigation — "open X page", "go to X"
+    const navMatch = cmd.match(/^(?:open|go to|navigate to|visit)\s+(?:the\s+)?(.+?)(?:\s+page)?$/);
+    if (navMatch) {
+      const target = navMatch[1].trim();
+      return tryNavigate(target);
+    }
+
+    // Fill commands — "fill X with Y", "type Y in X"
+    const fillMatch = cmd.match(/(?:fill|type|enter|input|put)\s+(.+?)\s+(?:in|into|with)\s+(.+)/);
+    if (fillMatch) {
+      return tryFill(fillMatch[2], fillMatch[1]);
+    }
+
+    // Scroll commands
+    if (cmd.includes("scroll down")) { window.scrollBy(0, 300); addMsg("action-approve", "⬇️ Scrolled down"); return true; }
+    if (cmd.includes("scroll up")) { window.scrollBy(0, -300); addMsg("action-approve", "⬆️ Scrolled up"); return true; }
+    if (cmd.includes("scroll to top")) { window.scrollTo(0, 0); addMsg("action-approve", "⬆️ Scrolled to top"); return true; }
+    if (cmd.includes("scroll to bottom")) { window.scrollTo(0, document.body.scrollHeight); addMsg("action-approve", "⬇️ Scrolled to bottom"); return true; }
+
+    return false; // not handled
+  }
+
+  function tryClickElement(targetText) {
+    const allClickable = [
+      ...document.querySelectorAll("button, a, [role='button'], input[type='submit'], input[type='button']")
+    ].filter(el => !el.closest("#af-panel"));
+
+    // Find best match by text content
+    const target = allClickable.find(el => {
+      const text = (el.textContent || el.value || el.title || "").toLowerCase().trim();
+      return text.includes(targetText.toLowerCase()) || targetText.toLowerCase().includes(text);
+    });
+
+    if (target) {
+      target.style.outline = "2px solid #0052cc";
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => {
+        target.style.outline = "";
+        target.click();
+      }, 500);
+      addMsg("action-approve", `🖱️ <strong>CLICKED</strong> — "${target.textContent.trim() || targetText}"`);
+      return true;
+    }
+
+    addMsg("action-escalate", `⚠️ Could not find a button or link matching "<strong>${targetText}</strong>" on this page.`);
+    return false;
+  }
+
+  function tryNavigate(targetText) {
+    const allLinks = [...document.querySelectorAll("a[href]")]
+      .filter(el => !el.closest("#af-panel"));
+
+    const target = allLinks.find(el => {
+      const text = (el.textContent || el.title || "").toLowerCase().trim();
+      const href = (el.href || "").toLowerCase();
+      return text.includes(targetText.toLowerCase()) ||
+        href.includes(targetText.toLowerCase().replace(/\s+/g, ""));
+    });
+
+    if (target) {
+      target.style.outline = "2px solid #0052cc";
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      addMsg("action-approve", `🔗 <strong>NAVIGATING</strong> — "${target.textContent.trim() || targetText}"`);
+      setTimeout(() => { target.click(); }, 600);
+      return true;
+    }
+
+    addMsg("action-escalate", `⚠️ Could not find a link to "<strong>${targetText}</strong>" on this page.`);
+    return false;
+  }
+
+  function tryFill(fieldTarget, value) {
+    const allInputs = [...document.querySelectorAll("input, textarea, select")]
+      .filter(el => !el.closest("#af-panel") && el.id !== "af-input");
+
+    const target = allInputs.find(el => {
+      const label = (el.labels?.[0]?.textContent || el.placeholder || el.name || el.id || "").toLowerCase();
+      return label.includes(fieldTarget.toLowerCase());
+    });
+
+    if (target) {
+      target.focus();
+      target.value = value;
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      target.dispatchEvent(new Event("change", { bubbles: true }));
+      target.style.outline = "2px solid #27ae60";
+      setTimeout(() => { target.style.outline = ""; }, 1000);
+      addMsg("action-approve", `✏️ <strong>FILLED</strong> — "${fieldTarget}" with "${value}"`);
+      return true;
+    }
+
+    addMsg("action-escalate", `⚠️ Could not find a field matching "<strong>${fieldTarget}</strong>"`);
+    return false;
+  }
 
   // ── Add Message ────────────────────────────────────────
   function addMsg(type, html) {
@@ -326,93 +508,59 @@
     const chips = [];
     if (rows.length === 0) return ["No pending items found"];
 
-    // ── Dynamically calculate thresholds from actual data ─
-    const amounts = rows.map(r => r.amount).sort((a, b) => a - b);
-    const minAmount = amounts[0];
-    const maxAmount = amounts[amounts.length - 1];
-    const midAmount = amounts[Math.floor(amounts.length / 2)];
-
-    // Round to nearest clean number for readable chips
-    function roundToClean(n) {
-      if (n >= 1000000) return Math.round(n / 100000) * 100000;
-      if (n >= 100000) return Math.round(n / 10000) * 10000;
-      if (n >= 10000) return Math.round(n / 5000) * 5000;
-      return Math.round(n / 1000) * 1000;
-    }
-    const cleanMid = roundToClean(midAmount);
-    const cleanMax = roundToClean(maxAmount);
-
-    // ── Group by plan ─────────────────────────────────────
+    // Group by plan
     const plans = {};
-    rows.forEach(r => { plans[r.plan] = (plans[r.plan] || []).concat(r); });
+    rows.forEach(r => {
+      plans[r.plan] = (plans[r.plan] || 0) + 1;
+    });
 
-    // ── Group by procedure keywords ───────────────────────
-    const routineKeywords = ["scan", "test", "examination", "panel", "check", "x-ray", "ultrasound"];
-    const surgicalKeywords = ["surgery", "appendectomy", "operation", "transplant", "procedure"];
-    const therapyKeywords = ["therapy", "dialysis", "session", "physiotherapy"];
+    // Group by procedure type
+    const routineKeywords = ["scan", "test", "examination", "panel", "check"];
+    const surgicalKeywords = ["surgery", "appendectomy", "operation"];
+    const routineRows = rows.filter(r =>
+      routineKeywords.some(k => r.procedure.toLowerCase().includes(k))
+    );
+    const surgicalRows = rows.filter(r =>
+      surgicalKeywords.some(k => r.procedure.toLowerCase().includes(k))
+    );
 
-    const routineRows = rows.filter(r => routineKeywords.some(k => r.procedure.toLowerCase().includes(k)));
-    const surgicalRows = rows.filter(r => surgicalKeywords.some(k => r.procedure.toLowerCase().includes(k)));
-    const therapyRows = rows.filter(r => therapyKeywords.some(k => r.procedure.toLowerCase().includes(k)));
-    const lowRows = rows.filter(r => r.amount <= cleanMid);
-    const highRows = rows.filter(r => r.amount > cleanMid);
+    // Amount analysis
+    const lowValue = rows.filter(r => r.amount < 50000);
+    const highValue = rows.filter(r => r.amount > 200000);
 
-    // ── Build chips from real data ────────────────────────
-
-    // Best plan chip — most common plan gets approve suggestion
-    const bestPlan = Object.entries(plans).sort((a, b) => b[1].length - a[1].length)[0];
-    if (bestPlan) {
-      chips.push(`Approve all ${bestPlan[1].length} ${bestPlan[0]} plan request${bestPlan[1].length > 1 ? "s" : ""}`);
+    // Generate contextual chips based on what's actually on the page
+    if (lowValue.length > 0) {
+      chips.push(`Approve ${lowValue.length} request${lowValue.length > 1 ? "s" : ""} under ₦50,000`);
     }
 
-    // Low value chip
-    if (lowRows.length > 0 && cleanMid > 0) {
-      chips.push(`Approve ${lowRows.length} request${lowRows.length > 1 ? "s" : ""} under ₦${cleanMid.toLocaleString()}`);
-    }
+    Object.entries(plans).forEach(([plan, count]) => {
+      if (plan === "Gold") {
+        chips.push(`Approve all ${count} Gold plan request${count > 1 ? "s" : ""}`);
+      } else if (plan === "Bronze" && highValue.filter(r => r.plan === "Bronze").length > 0) {
+        const bronzeHigh = highValue.filter(r => r.plan === "Bronze").length;
+        chips.push(`Reject ${bronzeHigh} Bronze request${bronzeHigh > 1 ? "s" : ""} above ₦200,000`);
+      }
+    });
 
-    // Routine procedures chip
     if (routineRows.length > 0) {
       chips.push(`Approve ${routineRows.length} routine diagnostic${routineRows.length > 1 ? "s" : ""}`);
     }
 
-    // Therapy chip
-    if (therapyRows.length > 0) {
-      chips.push(`Review ${therapyRows.length} therapy session${therapyRows.length > 1 ? "s" : ""}`);
-    }
-
-    // Surgical escalation chip
     if (surgicalRows.length > 0) {
       chips.push(`Escalate ${surgicalRows.length} surgical procedure${surgicalRows.length > 1 ? "s" : ""}`);
     }
 
-    // High value escalation chip
-    if (highRows.length > 0 && chips.length < 4) {
-      chips.push(`Escalate ${highRows.length} high-value above ₦${cleanMid.toLocaleString()}`);
+    if (highValue.length > 0 && chips.length < 4) {
+      chips.push(`Escalate ${highValue.length} high-value request${highValue.length > 1 ? "s" : ""} above ₦200,000`);
     }
 
-    // Worst plan rejection chip — least common plan + highest amounts
-    const worstPlan = Object.entries(plans)
-      .sort((a, b) => {
-        const avgA = a[1].reduce((s, r) => s + r.amount, 0) / a[1].length;
-        const avgB = b[1].reduce((s, r) => s + r.amount, 0) / b[1].length;
-        return avgB - avgA;
-      })
-      .find(([plan]) => plan !== bestPlan[0]);
-
-    if (worstPlan && chips.length < 4) {
-      const overLimit = worstPlan[1].filter(r => r.amount > cleanMid);
-      if (overLimit.length > 0) {
-        chips.push(`Reject ${overLimit.length} ${worstPlan[0]} above ₦${cleanMid.toLocaleString()}`);
-      }
-    }
-
-    // Fallback
+    // Always have at least one fallback
     if (chips.length === 0) {
       chips.push(`Approve all ${rows.length} pending requests`);
       chips.push("Escalate all to senior staff");
     }
 
-    return chips.slice(0, 4);
+    return chips.slice(0, 4); // max 4 chips
   }
 
   async function loadSmartChips(industry) {
@@ -431,8 +579,7 @@
         signal: controller.signal,
         headers: {
           "x-api-key": API_KEY,
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           industry,
@@ -455,10 +602,7 @@
   async function init() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
-        headers: {
-          "x-api-key": API_KEY,
-          "ngrok-skip-browser-warning": "true"
-        }
+        headers: { "x-api-key": API_KEY }
       });
       const data = await res.json();
 
@@ -477,9 +621,10 @@
       // Load smart dynamic chips
       loadSmartChips(clientInfo.industry);
 
-      // Enable input
+      // Enable input and mic
       document.getElementById("af-input").disabled = false;
       document.getElementById("af-send").disabled = false;
+      document.getElementById("af-mic").disabled = false;
 
       // Welcome message
       clearMessages();
@@ -534,7 +679,15 @@
       thinking.remove();
 
       if (pendingRows.length === 0) {
-        addMsg("agent", "✅ No pending items found on this page.");
+        thinking.remove();
+        // No table rows — try as a general page command
+        const handled = handleGeneralCommand(command);
+        if (!handled) {
+          addMsg("agent",
+            `I couldn't find pending items or a matching element for "<strong>${command}</strong>".<br><br>
+            Try: <em>"click Members"</em>, <em>"open Reports"</em>, <em>"scroll down"</em>, or give me a task from the table.`
+          );
+        }
         return;
       }
 
