@@ -701,7 +701,14 @@
       const targets = filterRows(pendingRows, command);
 
       if (targets.length === 0) {
-        addMsg("agent", "🔎 No rows matched that instruction. Try: <em>Approve all Gold plan</em> or <em>Reject Bronze above ₦200,000</em>");
+        // Nothing matched in table — try as general page command
+        const handled = handleGeneralCommand(command);
+        if (!handled) {
+          addMsg("agent",
+            `🔎 Found ${pendingRows.length} row${pendingRows.length !== 1 ? "s" : ""} on the page but none matched "<strong>${command}</strong>".<br><br>
+            Try being more specific, e.g. <em>"reject all Gold plan"</em> or <em>"approve requests under ₦50,000"</em>`
+          );
+        }
         return;
       }
 
@@ -714,45 +721,36 @@
 
       let processed = 0;
       for (const target of targets) {
-        const row = document.getElementById("row-" + target.id);
-        if (!row) continue;
-
-        // Scroll and highlight
-        row.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        row.style.transition = "all 0.3s ease";
-        row.style.outline = "2px solid #0052cc";
-        await sleep(250);
-        row.style.outline = "";
-        row.style.background = action === "approved" ? "#e8f5e9"
-          : action === "rejected" ? "#fdecea" : "#fff8e1";
-
-        // Click the button
-        if (action === "approved") {
-          const btn = row.querySelector(".btn-approve") ||
-            Array.from(row.querySelectorAll("button"))
-              .find(b => b.textContent.toLowerCase().includes("approv"));
-          if (btn) { btn.type = "button"; btn.click(); }
-        } else if (action === "rejected") {
-          const btn = row.querySelector(".btn-reject") ||
-            Array.from(row.querySelectorAll("button"))
-              .find(b => b.textContent.toLowerCase().includes("reject"));
-          if (btn) { btn.type = "button"; btn.click(); }
+        // Scroll to row
+        if (target._rowElement) {
+          target._rowElement.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          target._rowElement.style.outline = "2px solid #0052cc";
+          await sleep(250);
+          target._rowElement.style.outline = "";
         }
+
+        executeRowAction(target, action);
 
         const icon = action === "approved" ? "✅" : action === "rejected" ? "❌" : "⚠️";
         const msgType = action === "approved" ? "action-approve"
           : action === "rejected" ? "action-reject" : "action-escalate";
 
-        addMsg(msgType,
-          `${icon} <strong>${action.toUpperCase()}</strong> — ${target.id} · ${target.member} · ₦${target.amount.toLocaleString()} · ${target.plan}`
-        );
+        // Build a readable summary from whatever data the row has
+        const rowSummary = target._rowId
+          || Object.entries(target)
+            .filter(([k]) => !k.startsWith("_"))
+            .slice(0, 3)
+            .map(([k, v]) => v)
+            .join(" · ");
+
+        addMsg(msgType, `${icon} <strong>${action.toUpperCase()}</strong> — ${rowSummary}`);
 
         processed++;
         await sleep(650);
       }
 
       await sleep(300);
-      addMsg("agent", `🎉 <strong>Done!</strong> ${processed} item${processed !== 1 ? "s" : ""} processed successfully.`);
+      addMsg("agent", `🎉 <strong>Done!</strong> ${processed} item${processed !== 1 ? "s" : ""} processed.`);
 
     } catch (err) {
       addMsg("agent", `⚠️ Error: ${err.message}`);
@@ -764,52 +762,148 @@
     }
   }
 
-  // ── Read Pending Rows ───────────────────────────────────
+  // ── Universal Page Reader — reads ANY table structure ──
   function getPageContext() {
-    const rows = document.querySelectorAll("#requests-body tr");
-    const data = [];
-    rows.forEach(row => {
-      const badge = row.querySelector(".badge");
-      if (badge && badge.textContent.trim() === "Pending") {
-        data.push({
-          id: row.id.replace("row-", ""),
-          amount: parseInt(row.dataset.amount || 0),
-          plan: row.dataset.plan || "",
-          procedure: row.dataset.procedure || "",
-          member: row.cells[1]?.textContent?.trim() || "",
-          hospital: row.cells[2]?.textContent?.trim() || "",
+    const allRows = [];
+
+    // Scan every table on the page
+    document.querySelectorAll("table").forEach(table => {
+      if (table.closest("#af-panel")) return;
+
+      // Get headers
+      const headers = Array.from(table.querySelectorAll("th, thead td"))
+        .map(th => th.textContent.trim().toLowerCase());
+
+      // Get all rows
+      table.querySelectorAll("tbody tr, tr").forEach(row => {
+        if (row.querySelector("th")) return; // skip header rows
+        if (row.closest("#af-panel")) return;
+
+        const cells = Array.from(row.querySelectorAll("td"))
+          .map(td => td.textContent.trim());
+
+        if (cells.length === 0) return;
+
+        // Build a dynamic object from headers + cells
+        const rowData = {
+          _rowElement: row,
+          _rowId: row.id || null,
+          _allText: cells.join(" ").toLowerCase(),
+          _status: row.querySelector(".badge, [class*='status'], [class*='badge']")
+            ?.textContent?.trim()?.toLowerCase() || "unknown"
+        };
+
+        // Map cells to header names if available
+        headers.forEach((header, i) => {
+          if (cells[i] !== undefined) rowData[header] = cells[i];
         });
-      }
+
+        // Also store raw cells for fallback
+        cells.forEach((cell, i) => { rowData[`col${i}`] = cell; });
+
+        // Extract amount if any cell looks like money
+        cells.forEach(cell => {
+          const moneyMatch = cell.replace(/,/g, "").match(/[\d]+/);
+          if (moneyMatch && cell.includes("₦") || cell.includes("$") || cell.match(/^\d{3,}/)) {
+            rowData._amount = parseInt(cell.replace(/[^\d]/g, "")) || 0;
+          }
+        });
+
+        allRows.push(rowData);
+      });
     });
-    return data;
+
+    return allRows;
   }
 
-  // ── Filter Rows by Command ──────────────────────────────
+  // ── Smart Filter — uses AI brain, not hardcoded rules ──
   function filterRows(rows, command) {
     const cmd = command.toLowerCase();
 
-    const underMatch = cmd.match(/under\s+[₦#]?\s*([\d,]+)/);
-    const aboveMatch = cmd.match(/(?:above|over)\s+[₦#]?\s*([\d,]+)/);
+    // Amount filters
+    const underMatch = cmd.match(/under\s+[₦$#]?\s*([\d,]+)/);
+    const aboveMatch = cmd.match(/(?:above|over)\s+[₦$#]?\s*([\d,]+)/);
 
     if (underMatch) {
       const limit = parseInt(underMatch[1].replace(/,/g, ""));
-      return rows.filter(r => r.amount < limit);
+      return rows.filter(r => r._amount && r._amount < limit);
     }
     if (aboveMatch) {
       const limit = parseInt(aboveMatch[1].replace(/,/g, ""));
-      return rows.filter(r => r.amount > limit);
+      return rows.filter(r => r._amount && r._amount > limit);
     }
-    if (cmd.includes("gold"))   return rows.filter(r => r.plan.toLowerCase() === "gold");
-    if (cmd.includes("bronze")) return rows.filter(r => r.plan.toLowerCase() === "bronze");
-    if (cmd.includes("silver")) return rows.filter(r => r.plan.toLowerCase() === "silver");
 
-    const routineKeywords = ["scan", "test", "examination", "panel"];
-    if (cmd.includes("routine") || routineKeywords.some(k => cmd.includes(k))) {
-      return rows.filter(r => routineKeywords.some(k => r.procedure.toLowerCase().includes(k)));
+    // Status filters — find rows where any cell matches
+    if (cmd.includes("pending")) return rows.filter(r => r._allText.includes("pending"));
+    if (cmd.includes("approved")) return rows.filter(r => r._allText.includes("approved"));
+    if (cmd.includes("rejected")) return rows.filter(r => r._allText.includes("rejected"));
+
+    // Extract keyword from command and match against ALL row text
+    // Remove action words to get the subject
+    const subject = cmd
+      .replace(/approve|reject|escalate|flag|click|open|process|all|the|every|pending/g, "")
+      .trim();
+
+    if (subject.length > 1) {
+      const matched = rows.filter(r => r._allText.includes(subject));
+      if (matched.length > 0) return matched;
     }
-    if (cmd.includes("surg")) return rows.filter(r => r.procedure.toLowerCase().includes("surg"));
 
-    return rows; // default: all rows
+    // Default — return all rows
+    return rows;
+  }
+
+  // ── Execute Action on Universal Row ────────────────────
+  function executeRowAction(rowData, action) {
+    const row = rowData._rowElement;
+    if (!row) return false;
+
+    // Highlight
+    row.style.transition = "background 0.3s ease";
+    row.style.background = action === "approved" ? "#e8f5e9"
+      : action === "rejected" ? "#fdecea" : "#fff8e1";
+
+    // Try to find and click action button
+    const buttons = Array.from(row.querySelectorAll("button, [role='button']"));
+
+    if (action === "approved") {
+      const btn = buttons.find(b =>
+        b.textContent.toLowerCase().includes("approv") ||
+        b.className.toLowerCase().includes("approv") ||
+        b.className.toLowerCase().includes("success") ||
+        b.className.toLowerCase().includes("green")
+      );
+      if (btn) { btn.type = "button"; btn.click(); return true; }
+    }
+
+    if (action === "rejected") {
+      const btn = buttons.find(b =>
+        b.textContent.toLowerCase().includes("reject") ||
+        b.textContent.toLowerCase().includes("declin") ||
+        b.className.toLowerCase().includes("reject") ||
+        b.className.toLowerCase().includes("danger") ||
+        b.className.toLowerCase().includes("red")
+      );
+      if (btn) { btn.type = "button"; btn.click(); return true; }
+    }
+
+    if (action === "escalate") {
+      const btn = buttons.find(b =>
+        b.textContent.toLowerCase().includes("escalat") ||
+        b.textContent.toLowerCase().includes("flag") ||
+        b.textContent.toLowerCase().includes("review")
+      );
+      if (btn) { btn.type = "button"; btn.click(); return true; }
+    }
+
+    // Also update any badge/status element in the row
+    const badge = row.querySelector(".badge, [class*='status'], [class*='badge']");
+    if (badge) {
+      badge.className = badge.className.replace(/pending|approved|rejected|escalate/g, "") + " " + action;
+      badge.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+    }
+
+    return true;
   }
 
   // ── Execute Actions on Page ────────────────────────────
