@@ -660,10 +660,154 @@
     if (!command) return;
     input.value = "";
     addMsg("user", command);
-    await processCommand(command);
+    await routeCommand(command);
   }
 
-  // ── Process Command — Pure Client Side ─────────────────
+  // ── Command Router — decides what to do ────────────────
+  async function routeCommand(command) {
+    const cmd = command.toLowerCase().trim();
+
+    // ── Is it a page action command? ──────────────────────
+    const isPageAction = (
+      cmd.match(/\b(approve|reject|escalate|flag|process|click|open|go to|navigate|scroll|fill|type|enter)\b/)
+    );
+
+    if (isPageAction) {
+      await processCommand(command);
+    } else {
+      // ── Conversational — chat with AI ──────────────────
+      await chat(command);
+    }
+  }
+
+  // ── Conversational AI Chat ──────────────────────────────
+  async function chat(message) {
+    isProcessing = true;
+    document.getElementById("af-input").disabled = true;
+    document.getElementById("af-send").disabled = true;
+
+    const thinking = addMsg("thinking", "💭 Thinking...");
+
+    try {
+      // Get page context to give AI awareness
+      const rows = getPageContext();
+      const pageTitle = document.title;
+
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 20000);
+
+      const res = await fetch(`${BACKEND_URL}/api/agent/chat`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "x-api-key": API_KEY,
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
+        },
+        body: JSON.stringify({
+          message,
+          context: {
+            clientName: clientInfo?.name,
+            industry: clientInfo?.industry,
+            pageTitle,
+            rowCount: rows.length,
+            rowSummary: rows.slice(0, 5).map(r =>
+              Object.entries(r)
+                .filter(([k]) => !k.startsWith("_"))
+                .slice(0, 4)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ")
+            )
+          }
+        })
+      });
+
+      thinking.remove();
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reply) {
+          addMsg("agent", data.reply);
+          return;
+        }
+      }
+
+      // Fallback — local smart responses
+      throw new Error("Backend unavailable");
+
+    } catch (err) {
+      thinking.remove();
+      // Local conversational fallback
+      addMsg("agent", localChat(message));
+    } finally {
+      isProcessing = false;
+      document.getElementById("af-input").disabled = false;
+      document.getElementById("af-send").disabled = false;
+    }
+  }
+
+  // ── Local Chat Fallback ─────────────────────────────────
+  function localChat(message) {
+    const msg = message.toLowerCase();
+    const name = clientInfo?.name || "your system";
+    const rows = getPageContext();
+    const rowCount = rows.length;
+
+    // Greetings
+    if (msg.match(/^(hi|hello|hey|good morning|good afternoon|sup|yo)\b/)) {
+      return `👋 Hello! I'm your AI agent for <strong>${name}</strong>.<br><br>
+        I can see <strong>${rowCount} items</strong> on this page. I can:<br>
+        • Execute tasks — <em>"Approve all Gold plan"</em><br>
+        • Navigate — <em>"Open Reports"</em><br>
+        • Answer questions about what's on the page<br><br>
+        What would you like me to do?`;
+    }
+
+    // What can you do
+    if (msg.includes("what can you do") || msg.includes("help") || msg.includes("how do")) {
+      return `Here's what I can do on <strong>${name}</strong>:<br><br>
+        🗂️ <strong>Process table items</strong><br>
+        <em>"Approve all Gold plan requests"</em><br>
+        <em>"Reject Bronze above ₦200,000"</em><br>
+        <em>"Escalate all surgical procedures"</em><br><br>
+        🖱️ <strong>Control the page</strong><br>
+        <em>"Click Members"</em>, <em>"Open Reports"</em><br>
+        <em>"Scroll down"</em><br><br>
+        📊 <strong>Answer questions</strong><br>
+        <em>"How many pending items?"</em><br>
+        <em>"What's on this page?"</em>`;
+    }
+
+    // How many / count questions
+    if (msg.includes("how many") || msg.includes("count")) {
+      return `I can see <strong>${rowCount} items</strong> on this page right now.`;
+    }
+
+    // What's on the page
+    if (msg.includes("what") && (msg.includes("page") || msg.includes("screen") || msg.includes("see"))) {
+      if (rowCount > 0) {
+        const sample = rows.slice(0, 3).map(r =>
+          Object.entries(r).filter(([k]) => !k.startsWith("_")).slice(0, 3).map(([, v]) => v).join(" · ")
+        ).join("<br>");
+        return `I can see <strong>${rowCount} items</strong> on this page. Here are the first few:<br><br>${sample}<br><br>Tell me what you'd like me to do with them.`;
+      }
+      return `The page is <strong>${document.title}</strong>. I don't see any table data right now. Try navigating to a section with items.`;
+    }
+
+    // Thanks
+    if (msg.match(/thank|thanks|great|awesome|nice|good job|well done/)) {
+      return `Happy to help! 😊 Anything else you'd like me to handle?`;
+    }
+
+    // Default — intelligent fallback
+    return `I understood: <em>"${message}"</em><br><br>
+      I'm not sure if that's a task or a question. Try being specific:<br>
+      • To act on the page: <em>"Approve all Gold plan"</em><br>
+      • To navigate: <em>"Open Members"</em><br>
+      • To ask: <em>"How many items are pending?"</em>`;
+  }
+
+  // ── Process Command — Page Actions ─────────────────────
   async function processCommand(command) {
     isProcessing = true;
     document.getElementById("af-input").disabled = true;
@@ -674,19 +818,15 @@
       await sleep(400);
 
       const pendingRows = getPageContext();
-      thinking.innerHTML = `🧠 Found ${pendingRows.length} pending items — processing...`;
-      await sleep(600);
+      thinking.innerHTML = `🧠 Found ${pendingRows.length} item${pendingRows.length !== 1 ? "s" : ""} — processing...`;
+      await sleep(500);
       thinking.remove();
 
       if (pendingRows.length === 0) {
-        thinking.remove();
         // No table rows — try as a general page command
         const handled = handleGeneralCommand(command);
         if (!handled) {
-          addMsg("agent",
-            `I couldn't find pending items or a matching element for "<strong>${command}</strong>".<br><br>
-            Try: <em>"click Members"</em>, <em>"open Reports"</em>, <em>"scroll down"</em>, or give me a task from the table.`
-          );
+          await chat(command); // fall through to conversational AI
         }
         return;
       }
