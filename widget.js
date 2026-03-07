@@ -1,0 +1,892 @@
+(function () {
+
+  // ── Config ────────────────────────────────────────────
+  const BACKEND_URL = "http://localhost:3000";
+  const API_KEY = document.currentScript?.getAttribute("data-api-key") || "af_live_medicare001";
+  const THEME = document.currentScript?.getAttribute("data-theme") || "blue";
+
+  const THEMES = {
+    blue: { primary: "#0052cc", light: "#e8f0fe", accent: "#003d99" },
+    green: { primary: "#27ae60", light: "#e8f5e9", accent: "#219150" },
+    dark: { primary: "#1a1a2e", light: "#f0f0f0", accent: "#16213e" },
+  };
+  const theme = THEMES[THEME] || THEMES.blue;
+
+  // ── State ─────────────────────────────────────────────
+  let clientInfo = null;
+  let isProcessing = false;
+
+  // ── Inject Styles ─────────────────────────────────────
+  const style = document.createElement("style");
+  style.textContent = `
+    #af-launcher {
+      position: fixed; bottom: 30px; right: 30px;
+      width: 56px; height: 56px;
+      background: ${theme.primary};
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 20px ${theme.primary}66;
+      z-index: 9999;
+      transition: all 0.3s ease;
+      font-size: 24px;
+      border: none;
+    }
+    #af-launcher:hover { transform: scale(1.1); }
+
+    #af-panel {
+      position: fixed; bottom: 100px; right: 30px;
+      width: 390px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 10px 50px rgba(0,0,0,0.15);
+      z-index: 9998;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid #e0e0e0;
+      font-family: Arial, sans-serif;
+      animation: af-slide-up 0.25s ease;
+    }
+    @keyframes af-slide-up {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    #af-panel.open { display: flex; }
+
+    #af-header {
+      background: ${theme.primary};
+      color: white;
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #af-header .af-title { font-size: 14px; font-weight: bold; }
+    #af-header .af-sub { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+    #af-header .af-status {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; opacity: 0.9;
+    }
+    .af-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #00FF88;
+      animation: af-pulse 2s infinite;
+    }
+    @keyframes af-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    #af-close {
+      cursor: pointer; font-size: 18px;
+      opacity: 0.7; margin-left: 12px;
+    }
+    #af-close:hover { opacity: 1; }
+
+    #af-usage {
+      background: ${theme.light};
+      padding: 8px 16px;
+      font-size: 11px;
+      color: ${theme.primary};
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid #e8e8e8;
+    }
+    .af-usage-bar {
+      height: 3px;
+      background: #ddd;
+      border-radius: 2px;
+      margin-top: 4px;
+    }
+    .af-usage-fill {
+      height: 100%;
+      background: ${theme.primary};
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    #af-messages {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      max-height: 320px;
+      min-height: 180px;
+      background: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .af-msg {
+      max-width: 88%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .af-msg.user {
+      background: ${theme.primary};
+      color: white;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .af-msg.agent {
+      background: white;
+      color: #333;
+      align-self: flex-start;
+      border: 1px solid #e0e0e0;
+      border-bottom-left-radius: 4px;
+    }
+    .af-msg.thinking {
+      color: #999;
+      font-style: italic;
+      background: white;
+      border: 1px dashed #ddd;
+      align-self: flex-start;
+    }
+    .af-msg.action-approve {
+      background: #e8f5e9;
+      color: #2e7d32;
+      align-self: flex-start;
+      border: 1px solid #c8e6c9;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+    .af-msg.action-reject {
+      background: #fdecea;
+      color: #c62828;
+      align-self: flex-start;
+      border: 1px solid #ffcdd2;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+    .af-msg.action-escalate {
+      background: #fff8e1;
+      color: #f57f17;
+      align-self: flex-start;
+      border: 1px solid #ffe082;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+
+    .af-chips {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 8px 14px 10px;
+      background: #f8f9fa;
+    }
+    .af-chip {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 16px;
+      padding: 5px 12px;
+      font-size: 11px;
+      cursor: pointer;
+      color: ${theme.primary};
+      transition: all 0.2s;
+    }
+    .af-chip:hover {
+      background: ${theme.primary};
+      color: white;
+      border-color: ${theme.primary};
+    }
+
+    #af-input-area {
+      padding: 12px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      gap: 8px;
+      background: white;
+    }
+    #af-input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 24px;
+      font-size: 13px;
+      outline: none;
+      font-family: Arial, sans-serif;
+    }
+    #af-input:focus { border-color: ${theme.primary}; }
+    #af-input:disabled { background: #f5f5f5; color: #aaa; }
+    #af-send {
+      background: ${theme.primary};
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 38px; height: 38px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    #af-send:hover { background: ${theme.accent}; }
+    #af-send:disabled { background: #ccc; cursor: not-allowed; }
+
+    #af-branding {
+      text-align: center;
+      font-size: 10px;
+      color: #bbb;
+      padding: 6px;
+      background: white;
+      border-top: 1px solid #f5f5f5;
+    }
+    #af-branding a {
+      color: ${theme.primary};
+      text-decoration: none;
+      font-weight: bold;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // ── Build Widget HTML ──────────────────────────────────
+  const launcher = document.createElement("button");
+  launcher.id = "af-launcher";
+  launcher.type = "button";
+  launcher.innerHTML = "🤖";
+  document.body.appendChild(launcher);
+
+  const panel = document.createElement("div");
+  panel.id = "af-panel";
+  panel.innerHTML = `
+    <div id="af-header">
+      <div>
+        <div class="af-title">🤖 AgentFlow AI</div>
+        <div class="af-sub" id="af-client-name">Connecting...</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="af-status">
+          <div class="af-dot"></div>
+          <span id="af-status-text">Live</span>
+        </div>
+        <span id="af-close">✕</span>
+      </div>
+    </div>
+    <div id="af-usage">
+      <span id="af-usage-text">Loading usage...</span>
+      <span id="af-tasks-left"></span>
+    </div>
+    <div id="af-messages">
+      <div class="af-msg thinking">Connecting to your AI agent...</div>
+    </div>
+    <div class="af-chips" id="af-chips"></div>
+    <div id="af-input-area">
+      <input id="af-input" type="text" placeholder="Give me an instruction..." disabled />
+      <button id="af-send" type="button" disabled>➤</button>
+    </div>
+    <div id="af-branding">Powered by <a href="#">AgentFlow</a></div>
+  `;
+  document.body.appendChild(panel);
+
+  // ── Toggle Panel ───────────────────────────────────────
+  launcher.addEventListener("click", () => panel.classList.toggle("open"));
+  document.getElementById("af-close").addEventListener("click", () => panel.classList.remove("open"));
+
+  // ── Add Message ────────────────────────────────────────
+  function addMsg(type, html) {
+    const msgs = document.getElementById("af-messages");
+    const div = document.createElement("div");
+    div.className = `af-msg ${type}`;
+    div.innerHTML = html;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    return div;
+  }
+
+  function clearMessages() {
+    document.getElementById("af-messages").innerHTML = "";
+  }
+
+  // ── Update Usage Bar ───────────────────────────────────
+  function updateUsage(used, limit) {
+    const pct = Math.min((used / limit) * 100, 100).toFixed(0);
+    document.getElementById("af-usage-text").innerHTML =
+      `Tasks used: <strong>${used.toLocaleString()} / ${limit.toLocaleString()}</strong>`;
+    document.getElementById("af-tasks-left").textContent =
+      `${(limit - used).toLocaleString()} remaining`;
+  }
+
+  // ── Smart Dynamic Chips ────────────────────────────────
+  function renderChips(chips) {
+    const container = document.getElementById("af-chips");
+    container.innerHTML = chips.map(c =>
+      `<span class="af-chip">${c}</span>`
+    ).join("");
+    container.querySelectorAll(".af-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        document.getElementById("af-input").value = chip.textContent;
+        handleSend();
+      });
+    });
+  }
+
+  function generateSmartChips(rows, industry) {
+    const chips = [];
+    if (rows.length === 0) return ["No pending items found"];
+
+    // Group by plan
+    const plans = {};
+    rows.forEach(r => {
+      plans[r.plan] = (plans[r.plan] || 0) + 1;
+    });
+
+    // Group by procedure type
+    const routineKeywords = ["scan", "test", "examination", "panel", "check"];
+    const surgicalKeywords = ["surgery", "appendectomy", "operation"];
+    const routineRows = rows.filter(r =>
+      routineKeywords.some(k => r.procedure.toLowerCase().includes(k))
+    );
+    const surgicalRows = rows.filter(r =>
+      surgicalKeywords.some(k => r.procedure.toLowerCase().includes(k))
+    );
+
+    // Amount analysis
+    const lowValue = rows.filter(r => r.amount < 50000);
+    const highValue = rows.filter(r => r.amount > 200000);
+
+    // Generate contextual chips based on what's actually on the page
+    if (lowValue.length > 0) {
+      chips.push(`Approve ${lowValue.length} request${lowValue.length > 1 ? "s" : ""} under ₦50,000`);
+    }
+
+    Object.entries(plans).forEach(([plan, count]) => {
+      if (plan === "Gold") {
+        chips.push(`Approve all ${count} Gold plan request${count > 1 ? "s" : ""}`);
+      } else if (plan === "Bronze" && highValue.filter(r => r.plan === "Bronze").length > 0) {
+        const bronzeHigh = highValue.filter(r => r.plan === "Bronze").length;
+        chips.push(`Reject ${bronzeHigh} Bronze request${bronzeHigh > 1 ? "s" : ""} above ₦200,000`);
+      }
+    });
+
+    if (routineRows.length > 0) {
+      chips.push(`Approve ${routineRows.length} routine diagnostic${routineRows.length > 1 ? "s" : ""}`);
+    }
+
+    if (surgicalRows.length > 0) {
+      chips.push(`Escalate ${surgicalRows.length} surgical procedure${surgicalRows.length > 1 ? "s" : ""}`);
+    }
+
+    if (highValue.length > 0 && chips.length < 4) {
+      chips.push(`Escalate ${highValue.length} high-value request${highValue.length > 1 ? "s" : ""} above ₦200,000`);
+    }
+
+    // Always have at least one fallback
+    if (chips.length === 0) {
+      chips.push(`Approve all ${rows.length} pending requests`);
+      chips.push("Escalate all to senior staff");
+    }
+
+    return chips.slice(0, 4); // max 4 chips
+  }
+
+  async function loadSmartChips(industry) {
+    // Step 1 — instantly show local smart chips based on page data
+    const rows = getPageContext();
+    const localChips = generateSmartChips(rows, industry);
+    renderChips(localChips);
+
+    // Step 2 — try to upgrade with AI-generated chips in background
+    try {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 8000); // 8 second limit
+
+      const res = await fetch(`${BACKEND_URL}/api/agent/suggest`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "x-api-key": API_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          industry,
+          rows: rows.slice(0, 10)
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.suggestions?.length > 0) {
+          renderChips(data.suggestions);
+        }
+      }
+    } catch (err) {
+      // Silently keep local chips — no error shown to user
+    }
+  }
+
+  // ── Initialize — Call Backend Status ──────────────────
+  async function init() {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
+        headers: { "x-api-key": API_KEY }
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        clearMessages();
+        addMsg("agent", `⚠️ ${data.error}`);
+        return;
+      }
+
+      clientInfo = data.client;
+
+      // Update header
+      document.getElementById("af-client-name").textContent = clientInfo.name;
+      updateUsage(clientInfo.tasksUsed, clientInfo.tasksLimit);
+
+      // Load smart dynamic chips
+      loadSmartChips(clientInfo.industry);
+
+      // Enable input
+      document.getElementById("af-input").disabled = false;
+      document.getElementById("af-send").disabled = false;
+
+      // Welcome message
+      clearMessages();
+      addMsg("agent",
+        `👋 Hello! I'm your AI agent for <strong>${clientInfo.name}</strong>.<br><br>
+        I can see your dashboard and I'm ready to execute tasks for you.<br><br>
+        <em>What would you like me to handle?</em>`
+      );
+
+    } catch (err) {
+      clearMessages();
+      addMsg("agent", "⚠️ Could not connect to AgentFlow backend. Make sure the server is running.");
+      console.error("AgentFlow init error:", err);
+    }
+  }
+
+  // ── Send Handler ───────────────────────────────────────
+  document.getElementById("af-send").addEventListener("click", e => {
+    e.preventDefault();
+    handleSend();
+  });
+  document.getElementById("af-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSend();
+    }
+  });
+
+  async function handleSend() {
+    if (isProcessing) return;
+    const input = document.getElementById("af-input");
+    const command = input.value.trim();
+    if (!command) return;
+    input.value = "";
+    addMsg("user", command);
+    await processCommand(command);
+  }
+
+  // ── Process Command — Pure Client Side ─────────────────
+  async function processCommand(command) {
+    isProcessing = true;
+    document.getElementById("af-input").disabled = true;
+    document.getElementById("af-send").disabled = true;
+
+    try {
+      const thinking = addMsg("thinking", "🔍 Scanning page...");
+      await sleep(400);
+
+      const pendingRows = getPageContext();
+      thinking.innerHTML = `🧠 Found ${pendingRows.length} pending items — processing...`;
+      await sleep(600);
+      thinking.remove();
+
+      if (pendingRows.length === 0) {
+        addMsg("agent", "✅ No pending items found on this page.");
+        return;
+      }
+
+      // Determine action from command
+      const cmd = command.toLowerCase();
+      const action = cmd.includes("reject") ? "rejected"
+        : cmd.includes("escalate") || cmd.includes("flag") ? "escalate"
+        : "approved";
+
+      // Filter rows
+      const targets = filterRows(pendingRows, command);
+
+      if (targets.length === 0) {
+        addMsg("agent", "🔎 No rows matched that instruction. Try: <em>Approve all Gold plan</em> or <em>Reject Bronze above ₦200,000</em>");
+        return;
+      }
+
+      addMsg("agent",
+        `📋 <strong>${action.toUpperCase()}</strong> — ${targets.length} item${targets.length !== 1 ? "s" : ""} matched.<br>
+        Executing now 👇`
+      );
+
+      await sleep(400);
+
+      let processed = 0;
+      for (const target of targets) {
+        const row = document.getElementById("row-" + target.id);
+        if (!row) continue;
+
+        // Scroll and highlight
+        row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        row.style.transition = "all 0.3s ease";
+        row.style.outline = "2px solid #0052cc";
+        await sleep(250);
+        row.style.outline = "";
+        row.style.background = action === "approved" ? "#e8f5e9"
+          : action === "rejected" ? "#fdecea" : "#fff8e1";
+
+        // Click the button
+        if (action === "approved") {
+          const btn = row.querySelector(".btn-approve") ||
+            Array.from(row.querySelectorAll("button"))
+              .find(b => b.textContent.toLowerCase().includes("approv"));
+          if (btn) { btn.type = "button"; btn.click(); }
+        } else if (action === "rejected") {
+          const btn = row.querySelector(".btn-reject") ||
+            Array.from(row.querySelectorAll("button"))
+              .find(b => b.textContent.toLowerCase().includes("reject"));
+          if (btn) { btn.type = "button"; btn.click(); }
+        }
+
+        const icon = action === "approved" ? "✅" : action === "rejected" ? "❌" : "⚠️";
+        const msgType = action === "approved" ? "action-approve"
+          : action === "rejected" ? "action-reject" : "action-escalate";
+
+        addMsg(msgType,
+          `${icon} <strong>${action.toUpperCase()}</strong> — ${target.id} · ${target.member} · ₦${target.amount.toLocaleString()} · ${target.plan}`
+        );
+
+        processed++;
+        await sleep(650);
+      }
+
+      await sleep(300);
+      addMsg("agent", `🎉 <strong>Done!</strong> ${processed} item${processed !== 1 ? "s" : ""} processed successfully.`);
+
+    } catch (err) {
+      addMsg("agent", `⚠️ Error: ${err.message}`);
+      console.error(err);
+    } finally {
+      isProcessing = false;
+      document.getElementById("af-input").disabled = false;
+      document.getElementById("af-send").disabled = false;
+    }
+  }
+
+  // ── Read Pending Rows ───────────────────────────────────
+  function getPageContext() {
+    const rows = document.querySelectorAll("#requests-body tr");
+    const data = [];
+    rows.forEach(row => {
+      const badge = row.querySelector(".badge");
+      if (badge && badge.textContent.trim() === "Pending") {
+        data.push({
+          id: row.id.replace("row-", ""),
+          amount: parseInt(row.dataset.amount || 0),
+          plan: row.dataset.plan || "",
+          procedure: row.dataset.procedure || "",
+          member: row.cells[1]?.textContent?.trim() || "",
+          hospital: row.cells[2]?.textContent?.trim() || "",
+        });
+      }
+    });
+    return data;
+  }
+
+  // ── Filter Rows by Command ──────────────────────────────
+  function filterRows(rows, command) {
+    const cmd = command.toLowerCase();
+
+    const underMatch = cmd.match(/under\s+[₦#]?\s*([\d,]+)/);
+    const aboveMatch = cmd.match(/(?:above|over)\s+[₦#]?\s*([\d,]+)/);
+
+    if (underMatch) {
+      const limit = parseInt(underMatch[1].replace(/,/g, ""));
+      return rows.filter(r => r.amount < limit);
+    }
+    if (aboveMatch) {
+      const limit = parseInt(aboveMatch[1].replace(/,/g, ""));
+      return rows.filter(r => r.amount > limit);
+    }
+    if (cmd.includes("gold"))   return rows.filter(r => r.plan.toLowerCase() === "gold");
+    if (cmd.includes("bronze")) return rows.filter(r => r.plan.toLowerCase() === "bronze");
+    if (cmd.includes("silver")) return rows.filter(r => r.plan.toLowerCase() === "silver");
+
+    const routineKeywords = ["scan", "test", "examination", "panel"];
+    if (cmd.includes("routine") || routineKeywords.some(k => cmd.includes(k))) {
+      return rows.filter(r => routineKeywords.some(k => r.procedure.toLowerCase().includes(k)));
+    }
+    if (cmd.includes("surg")) return rows.filter(r => r.procedure.toLowerCase().includes("surg"));
+
+    return rows; // default: all rows
+  }
+
+  // ── Execute Actions on Page ────────────────────────────
+  async function executeOnPage(rows, action, command) {
+    const cmd = command.toLowerCase();
+
+    // Filter rows based on command
+    let targets = rows;
+
+    if (cmd.includes("under")) {
+      const match = cmd.match(/[\d,]+/);
+      const limit = match ? parseInt(match[0].replace(",", "")) : 999999;
+      targets = rows.filter(r => r.amount < limit);
+    } else if (cmd.includes("above") || cmd.includes("over")) {
+      const match = cmd.match(/[\d,]+/);
+      const limit = match ? parseInt(match[0].replace(",", "")) : 0;
+      targets = rows.filter(r => r.amount > limit);
+    } else if (cmd.includes("gold")) {
+      targets = rows.filter(r => r.plan === "Gold");
+    } else if (cmd.includes("bronze")) {
+      targets = rows.filter(r => r.plan === "Bronze");
+    } else if (cmd.includes("silver")) {
+      targets = rows.filter(r => r.plan === "Silver");
+    }
+
+    if (targets.length === 0) {
+      addMsg("agent", "🔎 No matching rows found on the dashboard for that instruction.");
+      return;
+    }
+
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i];
+      const row = document.getElementById("row-" + target.id);
+
+      if (row) {
+        // Highlight row
+        row.style.transition = "background 0.4s ease";
+        row.style.background = action === "approved"
+          ? "#e8f5e9" : action === "rejected"
+          ? "#fdecea" : "#fff8e1";
+
+        // Update badge
+        if (typeof updateStatus === "function") {
+          updateStatus(target.id, action);
+        }
+      }
+
+      const icon = action === "approved" ? "✅" : action === "rejected" ? "❌" : "⚠️";
+      addMsg(`action-${action}`,
+        `${icon} <strong>${action.toUpperCase()}</strong> — ${target.id} · ${target.member} · ₦${target.amount.toLocaleString()}`
+      );
+
+      await sleep(600);
+    }
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ── DOM Scanner — Reads Any Page ──────────────────────
+function scanPage() {
+  const elements = [];
+  let idCounter = 0;
+
+  function generateId(el) {
+    if (!el.dataset.afId) {
+      el.dataset.afId = "af_el_" + idCounter++;
+    }
+    return el.dataset.afId;
+  }
+
+  // Scan buttons
+  document.querySelectorAll("button, [role='button'], input[type='button'], input[type='submit']").forEach(el => {
+    if (el.id === "af-launcher" || el.closest("#af-panel")) return;
+    elements.push({
+      afId: generateId(el),
+      type: "button",
+      text: (el.textContent || el.value || "").trim().substring(0, 80),
+      id: el.id || null,
+      classes: el.className || null,
+      disabled: el.disabled || false,
+      visible: el.offsetParent !== null
+    });
+  });
+
+  // Scan inputs
+  document.querySelectorAll("input:not([type='button']):not([type='submit']), textarea, select").forEach(el => {
+    if (el.id === "af-input" || el.closest("#af-panel")) return;
+    elements.push({
+      afId: generateId(el),
+      type: el.tagName === "SELECT" ? "select" : el.tagName === "TEXTAREA" ? "textarea" : "input",
+      inputType: el.type || "text",
+      placeholder: el.placeholder || null,
+      label: el.labels?.[0]?.textContent?.trim() || null,
+      id: el.id || null,
+      value: el.value || null,
+      options: el.tagName === "SELECT"
+        ? Array.from(el.options).map(o => o.text)
+        : null,
+      visible: el.offsetParent !== null
+    });
+  });
+
+  // Scan links
+  document.querySelectorAll("a[href]").forEach(el => {
+    if (el.closest("#af-panel")) return;
+    elements.push({
+      afId: generateId(el),
+      type: "link",
+      text: el.textContent.trim().substring(0, 80),
+      href: el.href || null,
+      id: el.id || null,
+      visible: el.offsetParent !== null
+    });
+  });
+
+  // Scan tables
+  document.querySelectorAll("table").forEach(table => {
+    if (table.closest("#af-panel")) return;
+    const headers = Array.from(table.querySelectorAll("th"))
+      .map(th => th.textContent.trim());
+    const rows = Array.from(table.querySelectorAll("tbody tr")).map(row => {
+      const cells = Array.from(row.querySelectorAll("td"))
+        .map(td => td.textContent.trim().substring(0, 50));
+      return {
+        afId: generateId(row),
+        id: row.id || null,
+        data: row.dataset || {},
+        cells,
+        status: row.querySelector(".badge")?.textContent?.trim() || null
+      };
+    });
+    elements.push({
+      afId: generateId(table),
+      type: "table",
+      id: table.id || null,
+      headers,
+      rowCount: rows.length,
+      rows: rows.slice(0, 30)
+    });
+  });
+
+  // Scan forms
+  document.querySelectorAll("form").forEach(form => {
+    if (form.closest("#af-panel")) return;
+    elements.push({
+      afId: generateId(form),
+      type: "form",
+      id: form.id || null,
+      action: form.action || null
+    });
+  });
+
+  // Page summary
+  const summary = {
+    title: document.title,
+    url: window.location.href,
+    pageText: document.body.innerText.substring(0, 500),
+    elementCount: elements.length,
+    elements
+  };
+
+  return summary;
+}
+
+// ── Action Executor — Performs AI Actions on Page ─────
+async function executeActions(actions) {
+  if (!actions || actions.length === 0) {
+    addMsg("agent", "🔎 No actions to execute on this page.");
+    return;
+  }
+
+  for (const action of actions) {
+    await sleep(600);
+
+    try {
+      // Find element by afId first, then fallback to id
+      let el = document.querySelector(`[data-af-id="${action.afId}"]`);
+      if (!el && action.elementId) {
+        el = document.getElementById(action.elementId);
+      }
+      if (!el && action.selector) {
+        el = document.querySelector(action.selector);
+      }
+
+      if (!el) {
+        addMsg("action-escalate", `⚠️ Could not find element for: <strong>${action.description}</strong>`);
+        continue;
+      }
+
+      // Highlight element before acting
+      const originalOutline = el.style.outline;
+      const originalBackground = el.style.background;
+      el.style.outline = "2px solid #0052cc";
+      el.style.background = "#e8f0fe";
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      await sleep(500);
+
+      // Perform the action
+      switch (action.type) {
+        case "click":
+          el.click();
+          addMsg("action-approve", `🖱️ <strong>CLICKED</strong> — ${action.description}`);
+          break;
+
+        case "fill":
+          el.focus();
+          el.value = action.value;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          addMsg("action-approve", `✏️ <strong>FILLED</strong> — ${action.description}: "${action.value}"`);
+          break;
+
+        case "select":
+          el.value = action.value;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          addMsg("action-approve", `📋 <strong>SELECTED</strong> — ${action.description}: "${action.value}"`);
+          break;
+
+        case "approve_row":
+          // Special handler for table rows with approve buttons
+          const approveBtn = el.querySelector(".btn-approve") ||
+            el.querySelector("[class*='approve']") ||
+            Array.from(el.querySelectorAll("button")).find(b =>
+              b.textContent.toLowerCase().includes("approve")
+            );
+          if (approveBtn) {
+            approveBtn.click();
+            addMsg("action-approve", `✅ <strong>APPROVED</strong> — ${action.description}`);
+          }
+          break;
+
+        case "reject_row":
+          const rejectBtn = el.querySelector(".btn-reject") ||
+            el.querySelector("[class*='reject']") ||
+            Array.from(el.querySelectorAll("button")).find(b =>
+              b.textContent.toLowerCase().includes("reject")
+            );
+          if (rejectBtn) {
+            rejectBtn.click();
+            addMsg("action-reject", `❌ <strong>REJECTED</strong> — ${action.description}`);
+          }
+          break;
+
+        case "navigate":
+          addMsg("action-approve", `🔗 <strong>NAVIGATING</strong> — ${action.description}`);
+          await sleep(400);
+          window.location.href = action.value;
+          break;
+
+        default:
+          addMsg("action-escalate", `⚠️ Unknown action type: ${action.type}`);
+      }
+
+      // Remove highlight
+      await sleep(300);
+      el.style.outline = originalOutline;
+      el.style.background = originalBackground;
+
+    } catch (err) {
+      addMsg("action-escalate", `⚠️ Error on: <strong>${action.description}</strong> — ${err.message}`);
+      console.error("Action execution error:", err);
+    }
+  }
+}
+
+  // ── Boot ───────────────────────────────────────────────
+  init();
+
+})();
