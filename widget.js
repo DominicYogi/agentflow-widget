@@ -248,6 +248,30 @@
       animation: af-pulse 1s infinite;
     }
 
+    .af-confirm-preview {
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+    .af-confirm-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .af-confirm-yes, .af-confirm-no {
+      flex: 1;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .af-confirm-yes { background: #27ae60; color: white; }
+    .af-confirm-no  { background: #e74c3c; color: white; }
+    .af-confirm-yes:hover, .af-confirm-no:hover { opacity: 0.85; }
+
     #af-branding {
       text-align: center;
       font-size: 10px;
@@ -795,6 +819,36 @@
       • To ask: <em>"How many items are pending?"</em>`;
   }
 
+  // ── Confirmation Dialog ─────────────────────────────────
+  function showConfirmation(previewHTML) {
+    return new Promise((resolve) => {
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "af-msg agent af-confirm-msg";
+      msgDiv.innerHTML = `
+        <div class="af-confirm-preview">${previewHTML}</div>
+        <div class="af-confirm-buttons">
+          <button class="af-confirm-yes" type="button">✅ Yes, proceed</button>
+          <button class="af-confirm-no" type="button">❌ Cancel</button>
+        </div>
+      `;
+
+      const msgs = document.getElementById("af-messages");
+      msgs.appendChild(msgDiv);
+      msgs.scrollTop = msgs.scrollHeight;
+
+      msgDiv.querySelector(".af-confirm-yes").addEventListener("click", () => {
+        msgDiv.querySelector(".af-confirm-buttons").remove();
+        msgDiv.querySelector(".af-confirm-preview").innerHTML += "<br><em style='opacity:0.6;font-size:12px'>Confirmed ✓</em>";
+        resolve(true);
+      });
+
+      msgDiv.querySelector(".af-confirm-no").addEventListener("click", () => {
+        msgDiv.remove();
+        resolve(false);
+      });
+    });
+  }
+
   // ── Process Command — Page Actions ─────────────────────
   async function processCommand(command) {
     isProcessing = true;
@@ -844,12 +898,40 @@
         return;
       }
 
-      addMsg("agent",
-        `📋 <strong>${action.toUpperCase()}</strong> — ${targets.length} item${targets.length !== 1 ? "s" : ""} matched.<br>
-        Executing now 👇`
+      // ── Show confirmation before doing anything ───────────
+      const icon = action === "approved" ? "✅" : action === "rejected" ? "❌" : "⚠️";
+
+      const preview = targets.map(t => {
+        const namedVals = Object.entries(t)
+          .filter(([k]) => !k.startsWith("_") && !k.match(/^col\d+$/))
+          .slice(0, 3).map(([, v]) => v);
+        const fallbackVals = Object.entries(t)
+          .filter(([k]) => k.match(/^col\d+$/))
+          .slice(0, 3).map(([, v]) => v);
+        return `• ${(namedVals.length > 0 ? namedVals : fallbackVals).join(" · ")}`;
+      }).join("<br>");
+
+      // Unlock input while waiting for confirmation click
+      isProcessing = false;
+      document.getElementById("af-input").disabled = false;
+      document.getElementById("af-send").disabled = false;
+
+      const confirmed = await showConfirmation(
+        `${icon} <strong>${action.toUpperCase()} ${targets.length} item${targets.length !== 1 ? "s" : ""}</strong><br><br>${preview}`
       );
 
-      await sleep(400);
+      // Lock again for execution
+      isProcessing = true;
+      document.getElementById("af-input").disabled = true;
+      document.getElementById("af-send").disabled = true;
+
+      if (!confirmed) {
+        addMsg("agent", "👍 Got it — cancelled. Let me know if you'd like to do something else.");
+        return;
+      }
+
+      addMsg("agent", `Executing now 👇`);
+      await sleep(300);
 
       let processed = 0;
       for (const target of targets) {
@@ -867,15 +949,20 @@
         const msgType = action === "approved" ? "action-approve"
           : action === "rejected" ? "action-reject" : "action-escalate";
 
-        // Build a readable summary from whatever data the row has
-        const rowSummary = target._rowId
-          || Object.entries(target)
-            .filter(([k]) => !k.startsWith("_"))
-            .slice(0, 3)
-            .map(([k, v]) => v)
-            .join(" · ");
+        // Build readable summary — prefer named columns over col0/col1
+        const namedEntries = Object.entries(target)
+          .filter(([k]) => !k.startsWith("_") && !k.match(/^col\d+$/))
+          .slice(0, 3)
+          .map(([, v]) => v);
 
-        addMsg(msgType, `${icon} <strong>${action.toUpperCase()}</strong> — ${rowSummary}`);
+        const fallbackEntries = Object.entries(target)
+          .filter(([k]) => k.match(/^col\d+$/))
+          .slice(0, 3)
+          .map(([, v]) => v);
+
+        const rowSummary = (namedEntries.length > 0 ? namedEntries : fallbackEntries).join(" · ");
+
+        addMsg(msgType, `${icon} <strong>${action.toUpperCase()}</strong> — ${rowSummary || target._rowId || "item"}}`);
 
         processed++;
         await sleep(650);
@@ -948,14 +1035,13 @@
     return allRows;
   }
 
-  // ── Smart Filter — uses AI brain, not hardcoded rules ──
+  // ── Smart Filter ───────────────────────────────────────
   function filterRows(rows, command) {
     const cmd = command.toLowerCase();
 
     // Amount filters
     const underMatch = cmd.match(/under\s+[₦$#]?\s*([\d,]+)/);
     const aboveMatch = cmd.match(/(?:above|over)\s+[₦$#]?\s*([\d,]+)/);
-
     if (underMatch) {
       const limit = parseInt(underMatch[1].replace(/,/g, ""));
       return rows.filter(r => r._amount && r._amount < limit);
@@ -965,15 +1051,34 @@
       return rows.filter(r => r._amount && r._amount > limit);
     }
 
-    // Status filters — find rows where any cell matches
-    if (cmd.includes("pending")) return rows.filter(r => r._allText.includes("pending"));
-    if (cmd.includes("approved")) return rows.filter(r => r._allText.includes("approved"));
-    if (cmd.includes("rejected")) return rows.filter(r => r._allText.includes("rejected"));
+    // Plan filters — check all cell values
+    if (cmd.includes("gold"))   return rows.filter(r => r._allText.includes("gold"));
+    if (cmd.includes("bronze")) return rows.filter(r => r._allText.includes("bronze"));
+    if (cmd.includes("silver")) return rows.filter(r => r._allText.includes("silver"));
 
-    // Extract keyword from command and match against ALL row text
-    // Remove action words to get the subject
+    // Procedure type filters
+    const routineKeywords = ["scan", "test", "examination", "panel", "check", "x-ray", "ultrasound", "diagnostic"];
+    const surgicalKeywords = ["surgery", "appendectomy", "operation", "transplant", "surgical", "surg"];
+    const therapyKeywords = ["therapy", "dialysis", "session", "physiotherapy"];
+
+    if (cmd.includes("routine") || cmd.includes("diagnostic") || routineKeywords.some(k => cmd.includes(k))) {
+      return rows.filter(r => routineKeywords.some(k => r._allText.includes(k)));
+    }
+    if (cmd.includes("surg") || cmd.includes("surgical")) {
+      return rows.filter(r => surgicalKeywords.some(k => r._allText.includes(k)));
+    }
+    if (cmd.includes("therap") || cmd.includes("dialysis") || cmd.includes("session")) {
+      return rows.filter(r => therapyKeywords.some(k => r._allText.includes(k)));
+    }
+
+    // Status filters
+    if (cmd.includes("pending")) return rows.filter(r => r._allText.includes("pending"));
+
+    // Extract meaningful subject — remove action words AND numbers
     const subject = cmd
-      .replace(/approve|reject|escalate|flag|click|open|process|all|the|every|pending/g, "")
+      .replace(/\b(approve|reject|escalate|flag|process|click|all|every|the|pending|request|requests|item|items|procedure|procedures|plan|plans|high.value|routine|low.value)\b/g, "")
+      .replace(/\b\d+\b/g, "") // remove numbers like "2"
+      .replace(/\s+/g, " ")
       .trim();
 
     if (subject.length > 1) {
@@ -981,7 +1086,10 @@
       if (matched.length > 0) return matched;
     }
 
-    // Default — return all rows
+    // Default — all rows only if command says "all" or "every"
+    if (cmd.includes("all") || cmd.includes("every")) return rows;
+
+    // Last resort — return all
     return rows;
   }
 
