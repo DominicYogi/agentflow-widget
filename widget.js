@@ -326,59 +326,93 @@
     const chips = [];
     if (rows.length === 0) return ["No pending items found"];
 
-    // Group by plan
+    // ── Dynamically calculate thresholds from actual data ─
+    const amounts = rows.map(r => r.amount).sort((a, b) => a - b);
+    const minAmount = amounts[0];
+    const maxAmount = amounts[amounts.length - 1];
+    const midAmount = amounts[Math.floor(amounts.length / 2)];
+
+    // Round to nearest clean number for readable chips
+    function roundToClean(n) {
+      if (n >= 1000000) return Math.round(n / 100000) * 100000;
+      if (n >= 100000) return Math.round(n / 10000) * 10000;
+      if (n >= 10000) return Math.round(n / 5000) * 5000;
+      return Math.round(n / 1000) * 1000;
+    }
+    const cleanMid = roundToClean(midAmount);
+    const cleanMax = roundToClean(maxAmount);
+
+    // ── Group by plan ─────────────────────────────────────
     const plans = {};
-    rows.forEach(r => {
-      plans[r.plan] = (plans[r.plan] || 0) + 1;
-    });
+    rows.forEach(r => { plans[r.plan] = (plans[r.plan] || []).concat(r); });
 
-    // Group by procedure type
-    const routineKeywords = ["scan", "test", "examination", "panel", "check"];
-    const surgicalKeywords = ["surgery", "appendectomy", "operation"];
-    const routineRows = rows.filter(r =>
-      routineKeywords.some(k => r.procedure.toLowerCase().includes(k))
-    );
-    const surgicalRows = rows.filter(r =>
-      surgicalKeywords.some(k => r.procedure.toLowerCase().includes(k))
-    );
+    // ── Group by procedure keywords ───────────────────────
+    const routineKeywords = ["scan", "test", "examination", "panel", "check", "x-ray", "ultrasound"];
+    const surgicalKeywords = ["surgery", "appendectomy", "operation", "transplant", "procedure"];
+    const therapyKeywords = ["therapy", "dialysis", "session", "physiotherapy"];
 
-    // Amount analysis
-    const lowValue = rows.filter(r => r.amount < 50000);
-    const highValue = rows.filter(r => r.amount > 200000);
+    const routineRows = rows.filter(r => routineKeywords.some(k => r.procedure.toLowerCase().includes(k)));
+    const surgicalRows = rows.filter(r => surgicalKeywords.some(k => r.procedure.toLowerCase().includes(k)));
+    const therapyRows = rows.filter(r => therapyKeywords.some(k => r.procedure.toLowerCase().includes(k)));
+    const lowRows = rows.filter(r => r.amount <= cleanMid);
+    const highRows = rows.filter(r => r.amount > cleanMid);
 
-    // Generate contextual chips based on what's actually on the page
-    if (lowValue.length > 0) {
-      chips.push(`Approve ${lowValue.length} request${lowValue.length > 1 ? "s" : ""} under ₦50,000`);
+    // ── Build chips from real data ────────────────────────
+
+    // Best plan chip — most common plan gets approve suggestion
+    const bestPlan = Object.entries(plans).sort((a, b) => b[1].length - a[1].length)[0];
+    if (bestPlan) {
+      chips.push(`Approve all ${bestPlan[1].length} ${bestPlan[0]} plan request${bestPlan[1].length > 1 ? "s" : ""}`);
     }
 
-    Object.entries(plans).forEach(([plan, count]) => {
-      if (plan === "Gold") {
-        chips.push(`Approve all ${count} Gold plan request${count > 1 ? "s" : ""}`);
-      } else if (plan === "Bronze" && highValue.filter(r => r.plan === "Bronze").length > 0) {
-        const bronzeHigh = highValue.filter(r => r.plan === "Bronze").length;
-        chips.push(`Reject ${bronzeHigh} Bronze request${bronzeHigh > 1 ? "s" : ""} above ₦200,000`);
-      }
-    });
+    // Low value chip
+    if (lowRows.length > 0 && cleanMid > 0) {
+      chips.push(`Approve ${lowRows.length} request${lowRows.length > 1 ? "s" : ""} under ₦${cleanMid.toLocaleString()}`);
+    }
 
+    // Routine procedures chip
     if (routineRows.length > 0) {
       chips.push(`Approve ${routineRows.length} routine diagnostic${routineRows.length > 1 ? "s" : ""}`);
     }
 
+    // Therapy chip
+    if (therapyRows.length > 0) {
+      chips.push(`Review ${therapyRows.length} therapy session${therapyRows.length > 1 ? "s" : ""}`);
+    }
+
+    // Surgical escalation chip
     if (surgicalRows.length > 0) {
       chips.push(`Escalate ${surgicalRows.length} surgical procedure${surgicalRows.length > 1 ? "s" : ""}`);
     }
 
-    if (highValue.length > 0 && chips.length < 4) {
-      chips.push(`Escalate ${highValue.length} high-value request${highValue.length > 1 ? "s" : ""} above ₦200,000`);
+    // High value escalation chip
+    if (highRows.length > 0 && chips.length < 4) {
+      chips.push(`Escalate ${highRows.length} high-value above ₦${cleanMid.toLocaleString()}`);
     }
 
-    // Always have at least one fallback
+    // Worst plan rejection chip — least common plan + highest amounts
+    const worstPlan = Object.entries(plans)
+      .sort((a, b) => {
+        const avgA = a[1].reduce((s, r) => s + r.amount, 0) / a[1].length;
+        const avgB = b[1].reduce((s, r) => s + r.amount, 0) / b[1].length;
+        return avgB - avgA;
+      })
+      .find(([plan]) => plan !== bestPlan[0]);
+
+    if (worstPlan && chips.length < 4) {
+      const overLimit = worstPlan[1].filter(r => r.amount > cleanMid);
+      if (overLimit.length > 0) {
+        chips.push(`Reject ${overLimit.length} ${worstPlan[0]} above ₦${cleanMid.toLocaleString()}`);
+      }
+    }
+
+    // Fallback
     if (chips.length === 0) {
       chips.push(`Approve all ${rows.length} pending requests`);
       chips.push("Escalate all to senior staff");
     }
 
-    return chips.slice(0, 4); // max 4 chips
+    return chips.slice(0, 4);
   }
 
   async function loadSmartChips(industry) {
@@ -397,7 +431,8 @@
         signal: controller.signal,
         headers: {
           "x-api-key": API_KEY,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
         },
         body: JSON.stringify({
           industry,
@@ -420,7 +455,10 @@
   async function init() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
-        headers: { "x-api-key": API_KEY }
+        headers: {
+          "x-api-key": API_KEY,
+          "ngrok-skip-browser-warning": "true"
+        }
       });
       const data = await res.json();
 
