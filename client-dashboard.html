@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentFlow — Client Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0a0f;
+      --surface:  #111118;
+      --card:     #16161f;
+      --border:   #1e1e2e;
+      --accent:   #00e5a0;
+      --accent2:  #7c6fff;
+      --text:     #f0f0f8;
+      --muted:    #6b6b8a;
+      --danger:   #ff5c7a;
+      --warning:  #ffb547;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ── Noise texture overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ════════════════════════════════
+       LOGIN SCREEN
+    ════════════════════════════════ */
+    #login-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 24px;
+    }
+
+    #login-screen::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 20% 30%, rgba(0,229,160,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 60% at 80% 70%, rgba(124,111,255,0.08) 0%, transparent 60%);
+    }
+
+    .login-card {
+      position: relative;
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px 40px;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+      animation: fadeUp 0.5s ease both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 32px;
+    }
+
+    .login-logo .dot {
+      width: 10px; height: 10px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    .login-logo span {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: -0.5px;
+    }
+
+    .login-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      line-height: 1.2;
+    }
+
+    .login-sub {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 36px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .field-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      letter-spacing: 0.02em;
+    }
+
+    .field-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,229,160,0.1);
+    }
+
+    .field-input::placeholder { color: var(--muted); }
+
+    .login-btn {
+      width: 100%;
+      margin-top: 20px;
+      padding: 15px;
+      background: var(--accent);
+      color: #0a0a0f;
+      font-family: 'Syne', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .login-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,229,160,0.3); }
+    .login-btn:active { transform: translateY(0); }
+    .login-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .login-error {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: rgba(255,92,122,0.1);
+      border: 1px solid rgba(255,92,122,0.3);
+      border-radius: 8px;
+      color: var(--danger);
+      font-size: 13px;
+      display: none;
+    }
+
+    /* ════════════════════════════════
+       DASHBOARD
+    ════════════════════════════════ */
+    #dashboard {
+      display: none;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* Ambient glow */
+    #dashboard::before {
+      content: '';
+      position: fixed;
+      top: -200px; right: -200px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(0,229,160,0.05) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      height: 64px;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 18px;
+    }
+
+    .topbar-logo .dot {
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .client-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .client-badge .status-dot {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 6px var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .logout-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .logout-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* ── Main content ── */
+    .main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+    }
+
+    .page-header {
+      margin-bottom: 40px;
+    }
+
+    .page-header h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .page-header h1 span { color: var(--accent); }
+
+    .page-header p {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 14px;
+    }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .stat-card:nth-child(1) { animation-delay: 0.05s; }
+    .stat-card:nth-child(2) { animation-delay: 0.1s; }
+    .stat-card:nth-child(3) { animation-delay: 0.15s; }
+    .stat-card:nth-child(4) { animation-delay: 0.2s; }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .stat-card:hover::before { opacity: 1; }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .stat-value {
+      font-family: 'Syne', sans-serif;
+      font-size: 36px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .stat-value.green { color: var(--accent); }
+    .stat-value.purple { color: var(--accent2); }
+    .stat-value.orange { color: var(--warning); }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Usage bar ── */
+    .usage-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 24px;
+      animation: fadeUp 0.4s 0.25s ease both;
+    }
+
+    .section-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title .badge {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      background: rgba(0,229,160,0.12);
+      color: var(--accent);
+      padding: 3px 10px;
+      border-radius: 100px;
+      letter-spacing: 0.05em;
+    }
+
+    .usage-bar-wrap {
+      margin-bottom: 12px;
+    }
+
+    .usage-bar-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .usage-bar-labels strong { color: var(--text); }
+
+    .usage-bar-track {
+      height: 8px;
+      background: var(--surface);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+
+    .usage-bar-fill {
+      height: 100%;
+      border-radius: 100px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 1s cubic-bezier(0.4,0,0.2,1);
+      position: relative;
+    }
+
+    .usage-bar-fill::after {
+      content: '';
+      position: absolute;
+      right: 0; top: 0; bottom: 0;
+      width: 40px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15));
+      animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; }
+    }
+
+    .plan-pills {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .plan-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+
+    .plan-pill .icon { font-size: 16px; }
+    .plan-pill .pill-label { color: var(--muted); }
+    .plan-pill .pill-val { font-weight: 600; margin-left: 4px; }
+
+    /* ── Embed code ── */
+    .embed-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 24px;
+      animation: fadeUp 0.4s 0.3s ease both;
+    }
+
+    .embed-description {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 12.5px;
+      color: #a0e0c8;
+      line-height: 1.7;
+      overflow-x: auto;
+      white-space: pre;
+      position: relative;
+    }
+
+    .code-block .attr { color: var(--accent2); }
+    .code-block .val  { color: var(--warning); }
+    .code-block .tag  { color: var(--accent); }
+
+    .copy-btn {
+      margin-top: 12px;
+      padding: 10px 20px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .copy-btn.copied { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Quick actions ── */
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      animation: fadeUp 0.4s 0.35s ease both;
+    }
+
+    .quick-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.2s;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+
+    .quick-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .quick-icon {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+
+    .quick-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .quick-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .quick-grid { grid-template-columns: repeat(2, 1fr); }
+      .main { padding: 24px 16px; }
+      .topbar { padding: 0 16px; }
+    }
+
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .quick-grid { grid-template-columns: 1fr; }
+      .login-card { padding: 32px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="dot"></div>
+      <span>AgentFlow</span>
+    </div>
+    <h1 class="login-title">Welcome back</h1>
+    <p class="login-sub">Enter your API key to access your dashboard</p>
+
+    <label class="field-label" for="api-key-input">API Key</label>
+    <input
+      class="field-input"
+      id="api-key-input"
+      type="password"
+      placeholder="af_live_xxxxxxxxxxxxxxxx"
+      autocomplete="off"
+      spellcheck="false"
+    />
+
+    <button class="login-btn" id="login-btn" onclick="doLogin()">
+      Sign in →
+    </button>
+
+    <div class="login-error" id="login-error">
+      Invalid API key. Please check and try again.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     DASHBOARD
+══════════════════════════════════ -->
+<div id="dashboard">
+
+  <nav class="topbar">
+    <div class="topbar-logo">
+      <div class="dot"></div>
+      AgentFlow
+    </div>
+    <div class="topbar-right">
+      <div class="client-badge">
+        <div class="status-dot"></div>
+        <span id="topbar-client-name">Loading...</span>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">Sign out</button>
+    </div>
+  </nav>
+
+  <div class="main">
+
+    <div class="page-header">
+      <h1>Your <span id="header-client-name">Dashboard</span></h1>
+      <p id="header-plan-info">Loading your subscription details...</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Tasks Used</div>
+        <div class="stat-value green" id="stat-used">—</div>
+        <div class="stat-sub">this billing period</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Tasks Remaining</div>
+        <div class="stat-value" id="stat-remaining">—</div>
+        <div class="stat-sub">until next reset</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Plan</div>
+        <div class="stat-value purple" id="stat-plan">—</div>
+        <div class="stat-sub" id="stat-plan-limit">— tasks/month</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Status</div>
+        <div class="stat-value green" id="stat-status">—</div>
+        <div class="stat-sub" id="stat-industry">—</div>
+      </div>
+    </div>
+
+    <!-- Usage -->
+    <div class="usage-section">
+      <div class="section-title">
+        Usage This Period
+        <span class="badge" id="usage-pct-badge">0%</span>
+      </div>
+      <div class="usage-bar-wrap">
+        <div class="usage-bar-labels">
+          <span><strong id="bar-used">0</strong> tasks used</span>
+          <span><strong id="bar-limit">0</strong> total</span>
+        </div>
+        <div class="usage-bar-track">
+          <div class="usage-bar-fill" id="usage-bar-fill" style="width: 0%"></div>
+        </div>
+      </div>
+      <div class="plan-pills" id="plan-pills">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- Embed Code -->
+    <div class="embed-section">
+      <div class="section-title">Your Embed Code</div>
+      <p class="embed-description">
+        Copy this script tag and paste it before the closing <code style="color:var(--accent)">&lt;/body&gt;</code> tag on any web page. The AgentFlow widget will appear instantly.
+      </p>
+      <div class="code-block" id="embed-code-block">Loading...</div>
+      <button class="copy-btn" id="copy-btn" onclick="copyEmbed()">
+        📋 Copy embed code
+      </button>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="quick-grid">
+      <div class="quick-card" onclick="window.open('https://dominicyogi.github.io/agentflow-widget/', '_blank')">
+        <div class="quick-icon">🚀</div>
+        <div class="quick-title">Test Widget</div>
+        <div class="quick-desc">Open the demo dashboard and see your agent in action</div>
+      </div>
+      <div class="quick-card" onclick="showApiKey()">
+        <div class="quick-icon">🔑</div>
+        <div class="quick-title">View API Key</div>
+        <div class="quick-desc">See your full API key for integration and support</div>
+      </div>
+      <div class="quick-card" onclick="alert('Audit log coming soon in the next update!')">
+        <div class="quick-icon">📋</div>
+        <div class="quick-title">Audit Log</div>
+        <div class="quick-desc">See every action your agent has taken — coming soon</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Config ──────────────────────────────────────────────
+  const BACKEND_URL = "https://nephological-commendatorily-edmund.ngrok-free.dev";
+  let currentApiKey = "";
+  let clientData = null;
+
+  // ── Login ───────────────────────────────────────────────
+  document.getElementById("api-key-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") doLogin();
+  });
+
+  async function doLogin() {
+    const key = document.getElementById("api-key-input").value.trim();
+    if (!key) return;
+
+    const btn = document.getElementById("login-btn");
+    const err = document.getElementById("login-error");
+    btn.disabled = true;
+    btn.textContent = "Signing in...";
+    err.style.display = "none";
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
+        headers: {
+          "x-api-key": key,
+          "ngrok-skip-browser-warning": "true"
+        }
+      });
+
+      const data = await res.json();
+
+      if (!data.success) throw new Error(data.error || "Invalid key");
+
+      currentApiKey = key;
+      clientData = data.client;
+      renderDashboard(data.client);
+
+    } catch (err2) {
+      err.style.display = "block";
+      btn.disabled = false;
+      btn.textContent = "Sign in →";
+    }
+  }
+
+  // ── Render Dashboard ────────────────────────────────────
+  function renderDashboard(client) {
+    // Hide login, show dashboard
+    document.getElementById("login-screen").style.display = "none";
+    const dash = document.getElementById("dashboard");
+    dash.style.display = "block";
+
+    // Header
+    document.getElementById("topbar-client-name").textContent = client.name;
+    document.getElementById("header-client-name").textContent = client.name;
+    document.getElementById("header-plan-info").textContent =
+      `${client.plan} Plan · ${client.industry} · ${client.status === "active" ? "Active subscription" : "Inactive"}`;
+
+    // Stats
+    document.getElementById("stat-used").textContent = client.tasksUsed.toLocaleString();
+    document.getElementById("stat-remaining").textContent = client.tasksRemaining.toLocaleString();
+    document.getElementById("stat-plan").textContent = client.plan;
+    document.getElementById("stat-plan-limit").textContent = `${client.tasksLimit.toLocaleString()} tasks/month`;
+    document.getElementById("stat-status").textContent = client.status === "active" ? "Active" : "Inactive";
+    document.getElementById("stat-industry").textContent = client.industry;
+
+    // Usage bar
+    const pct = Math.min(100, Math.round((client.tasksUsed / client.tasksLimit) * 100));
+    document.getElementById("usage-pct-badge").textContent = `${pct}% used`;
+    document.getElementById("bar-used").textContent = client.tasksUsed.toLocaleString();
+    document.getElementById("bar-limit").textContent = client.tasksLimit.toLocaleString();
+    setTimeout(() => {
+      document.getElementById("usage-bar-fill").style.width = `${pct}%`;
+    }, 100);
+
+    // Plan pills
+    const planInfo = {
+      Starter: { price: "₦250,000/mo", icon: "⚡" },
+      Growth:  { price: "₦600,000/mo", icon: "🚀" },
+      Enterprise: { price: "₦1,500,000/mo", icon: "🏢" },
+    };
+    const info = planInfo[client.plan] || { price: "Custom", icon: "✨" };
+    document.getElementById("plan-pills").innerHTML = `
+      <div class="plan-pill"><span class="icon">${info.icon}</span><span class="pill-label">Plan:</span><span class="pill-val">${client.plan}</span></div>
+      <div class="plan-pill"><span class="icon">💳</span><span class="pill-label">Price:</span><span class="pill-val">${info.price}</span></div>
+      <div class="plan-pill"><span class="icon">📊</span><span class="pill-label">Tasks:</span><span class="pill-val">${client.tasksUsed} / ${client.tasksLimit}</span></div>
+      <div class="plan-pill"><span class="icon">🏭</span><span class="pill-label">Industry:</span><span class="pill-val">${client.industry}</span></div>
+    `;
+
+    // Embed code
+    renderEmbedCode(currentApiKey, client);
+  }
+
+  function renderEmbedCode(apiKey, client) {
+    const theme = client.industry === "HMO" ? "blue"
+      : client.industry === "Bank" ? "dark"
+      : "green";
+
+    const raw = `<script\n  src="https://dominicyogi.github.io/agentflow-widget/widget.js"\n  data-api-key="${apiKey}"\n  data-theme="${theme}">\n<\/script>`;
+
+    document.getElementById("embed-code-block").innerHTML =
+      `<span class="tag">&lt;script</span>\n  <span class="attr">src</span>=<span class="val">"https://dominicyogi.github.io/agentflow-widget/widget.js"</span>\n  <span class="attr">data-api-key</span>=<span class="val">"${apiKey}"</span>\n  <span class="attr">data-theme</span>=<span class="val">"${theme}"</span><span class="tag">&gt;\n&lt;/script&gt;</span>`;
+
+    document.getElementById("embed-code-block").dataset.raw = raw;
+  }
+
+  function copyEmbed() {
+    const raw = document.getElementById("embed-code-block").dataset.raw;
+    navigator.clipboard.writeText(raw).then(() => {
+      const btn = document.getElementById("copy-btn");
+      btn.textContent = "✅ Copied!";
+      btn.classList.add("copied");
+      setTimeout(() => {
+        btn.textContent = "📋 Copy embed code";
+        btn.classList.remove("copied");
+      }, 2000);
+    });
+  }
+
+  function showApiKey() {
+    alert(`Your API Key:\n\n${currentApiKey}\n\nKeep this private.`);
+  }
+
+  function doLogout() {
+    currentApiKey = "";
+    clientData = null;
+    document.getElementById("login-screen").style.display = "flex";
+    document.getElementById("dashboard").style.display = "none";
+    document.getElementById("api-key-input").value = "";
+    document.getElementById("login-btn").disabled = false;
+    document.getElementById("login-btn").textContent = "Sign in →";
+  }
+</script>
+</body>
+</html>
