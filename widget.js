@@ -985,6 +985,29 @@
       await sleep(300);
       addMsg("agent", `🎉 <strong>Done!</strong> ${processed} item${processed !== 1 ? "s" : ""} processed.`);
 
+      // ── Send audit log to backend ──────────────────────
+      const logItems = targets.map(t => {
+        const vals = Object.entries(t)
+          .filter(([k]) => !k.startsWith("_") && !k.match(/^col\d+$/))
+          .slice(0, 3).map(([, v]) => v);
+        return vals.join(" · ");
+      });
+
+      fetch(`${BACKEND_URL}/api/agent/log`, {
+        method: "POST",
+        headers: {
+          "x-api-key": API_KEY,
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
+        },
+        body: JSON.stringify({
+          command,
+          action,
+          items: logItems,
+          pageTitle: document.title
+        })
+      }).catch(() => {}); // fire and forget — don't block UI
+
     } catch (err) {
       addMsg("agent", `⚠️ Error: ${err.message}`);
       console.error(err);
