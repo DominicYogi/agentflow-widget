@@ -760,19 +760,52 @@
   function localIntent(command) {
     const cmd = command.toLowerCase();
 
-    const isAction = /\b(approve|accept|ok|confirm|pass|allow|grant|yes|process|handle|do|run|execute|mark|update|change|reject|decline|deny|refuse|block|fail|escalate|flag|raise|forward|refer|send|navigate|open|go|click|scroll|fill|type|enter|show|close|select|submit|press|tap)\b/.test(cmd);
+    // Page commands
+    if (/\b(navigate|open|go to|click|scroll|press|tap)\b/.test(cmd)) {
+      return { type: "page", command };
+    }
 
-    if (!isAction) return { type: "chat" };
-
+    // Determine action
     const action =
-      /\b(reject|decline|deny|refuse|block|fail|turn down|not approve)\b/.test(cmd) ? "rejected" :
-      /\b(escalate|flag|raise|forward|refer|send up|review|hold)\b/.test(cmd) ? "escalate" :
-      /\b(navigate|open|go to|go|click|scroll|fill|type|enter|show|close|press|tap)\b/.test(cmd) ? "page" :
-      "approved";
+      /\b(reject|decline|deny|refuse|block|turn down|disapprove)\b/.test(cmd) ? "rejected" :
+      /\b(escalate|flag|raise|forward|refer|hold|review|send up)\b/.test(cmd) ? "escalate" :
+      /\b(approve|accept|pass|allow|grant|confirm|process|handle|ok|yes|do|run|execute)\b/.test(cmd) ? "approved" :
+      null;
 
-    if (action === "page") return { type: "page", command };
+    if (!action) return { type: "chat" };
 
-    return { type: "task", action, command };
+    // ── Build filter from command ──────────────────────────
+    const filter = { plan: null, amountOp: null, amountValue: null, keywords: [], excludeKeyword: null };
+
+    // Amount
+    const underMatch = cmd.match(/(?:under|below|less than)\s+[₦$#]?\s*([\d,]+)(k?)/);
+    const aboveMatch = cmd.match(/(?:above|over|more than)\s+[₦$#]?\s*([\d,]+)(k?)/);
+    if (underMatch) {
+      filter.amountOp = "<";
+      filter.amountValue = parseInt(underMatch[1].replace(/,/g, "")) * (underMatch[2] === "k" ? 1000 : 1);
+    }
+    if (aboveMatch) {
+      filter.amountOp = ">";
+      filter.amountValue = parseInt(aboveMatch[1].replace(/,/g, "")) * (aboveMatch[2] === "k" ? 1000 : 1);
+    }
+
+    // Plan
+    if (cmd.includes("gold"))   filter.plan = "Gold";
+    if (cmd.includes("silver")) filter.plan = "Silver";
+    if (cmd.includes("bronze")) filter.plan = "Bronze";
+
+    // Procedure type keywords — map to actual terms found in rows
+    if (/\bsurgic|surgery|surgeries\b/.test(cmd))   filter.keywords = ["surgery", "appendectomy", "operation", "surgical"];
+    else if (/\broutine|diagnostic|scan|test\b/.test(cmd)) filter.keywords = ["scan", "test", "examination", "panel", "x-ray"];
+    else if (/\btherap|dialysis\b/.test(cmd))        filter.keywords = ["therapy", "dialysis", "session"];
+
+    // Named people — extract capitalized words or words after "named", "with name"
+    const nameMatch = cmd.match(/(?:named?|with name|for)\s+([a-z]+(?:\s+and\s+[a-z]+)*)/);
+    if (nameMatch) {
+      filter.keywords = nameMatch[1].split(/\s+and\s+/).map(n => n.trim());
+    }
+
+    return { type: "task", action, filter };
   }
 
   // ── Command Router ──────────────────────────────────────
@@ -1023,8 +1056,21 @@
         (cmd.includes("escalate") || cmd.includes("flag")) ? "escalate" :
         "approved");
 
-      // Filter rows — use AI filter if available
-      const targets = filterRows(pendingRows, command, intent?.filter || null);
+      // Use AI filter — if empty/null, fall back to local filter
+      const localFallback = localIntent(command);
+      const aiFilter = intent?.filter || null;
+
+      // Merge: use AI filter if it has meaningful content, else use local
+      const hasAiFilter = aiFilter && (
+        aiFilter.plan || aiFilter.amountOp ||
+        (aiFilter.keywords && aiFilter.keywords.length > 0) ||
+        aiFilter.excludeKeyword
+      );
+
+      const activeFilter = hasAiFilter ? aiFilter : (localFallback.filter || null);
+
+      // Filter rows — use best available filter
+      const targets = filterRows(pendingRows, command, activeFilter);
 
       if (targets.length === 0) {
         // Nothing matched in table — try as general page command
