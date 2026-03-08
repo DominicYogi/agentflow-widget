@@ -1287,14 +1287,28 @@
     // If AI gave us a structured filter, use it — no keyword guessing
     if (aiFilter) {
       let matched = [...rows];
+
       if (aiFilter.plan) matched = matched.filter(r => r._allText.includes(aiFilter.plan.toLowerCase()));
-      if (aiFilter.keyword) matched = matched.filter(r => r._allText.includes(aiFilter.keyword.toLowerCase()));
+
+      // keywords can be a string or array — OR logic (match ANY keyword)
+      if (aiFilter.keywords && aiFilter.keywords.length > 0) {
+        matched = matched.filter(r =>
+          aiFilter.keywords.some(k => r._allText.includes(k.toLowerCase()))
+        );
+      } else if (aiFilter.keyword) {
+        // support comma-separated names in a single keyword string
+        const parts = aiFilter.keyword.split(/[,\s]+and\s+|,\s*/).map(p => p.trim().toLowerCase()).filter(Boolean);
+        matched = matched.filter(r => parts.some(k => r._allText.includes(k)));
+      }
+
       if (aiFilter.excludeKeyword) matched = matched.filter(r => !r._allText.includes(aiFilter.excludeKeyword.toLowerCase()));
+
       if (aiFilter.amountOp && aiFilter.amountValue != null) {
         const val = aiFilter.amountValue;
         if (aiFilter.amountOp === "<") matched = matched.filter(r => r._amount && r._amount < val);
         if (aiFilter.amountOp === ">") matched = matched.filter(r => r._amount && r._amount > val);
       }
+
       return matched;
     }
 
