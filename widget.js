@@ -613,8 +613,23 @@
     }
   }
 
+  // ── Load html2canvas for screenshots ──────────────────
+  function loadHtml2Canvas() {
+    return new Promise((resolve) => {
+      if (typeof html2canvas !== "undefined") return resolve();
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      s.onload = resolve;
+      s.onerror = resolve; // fail silently
+      document.head.appendChild(s);
+    });
+  }
+
   // ── Initialize — Call Backend Status ──────────────────
   async function init() {
+    // Load vision library silently in background
+    loadHtml2Canvas();
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
         headers: { "x-api-key": API_KEY }
@@ -678,13 +693,33 @@
     await routeCommand(command);
   }
 
+  // ── Screenshot helper ──────────────────────────────────
+  async function captureScreenshot() {
+    try {
+      // Use html2canvas if available
+      if (typeof html2canvas !== "undefined") {
+        const canvas = await html2canvas(document.body, {
+          scale: 0.6,
+          useCORS: true,
+          allowTaint: true,
+          ignoreElements: el => el.id === "af-panel" || el.id === "af-launcher"
+        });
+        return canvas.toDataURL("image/jpeg", 0.7);
+      }
+    } catch (e) {}
+    return null;
+  }
+
   // ── AI Command Interpreter ─────────────────────────────
-  // Sends ANY command to AI, gets back structured intent
   async function interpretCommand(command) {
     try {
       const rows = getPageContext();
+
+      // Try to capture screenshot for vision
+      const screenshot = await captureScreenshot();
+
       const controller = new AbortController();
-      setTimeout(() => controller.abort(), 12000);
+      setTimeout(() => controller.abort(), 25000);
 
       const res = await fetch(`${BACKEND_URL}/api/agent/interpret`, {
         method: "POST",
@@ -696,6 +731,7 @@
         },
         body: JSON.stringify({
           command,
+          screenshot,  // base64 image — Claude sees the actual page
           rows: rows.slice(0, 15).map(r => ({
             text: r._allText,
             amount: r._amount,
@@ -710,11 +746,13 @@
 
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.intent) return data.intent;
+        if (data.success && data.intent) {
+          if (data.source === "vision") console.log("👁️ AgentFlow used vision");
+          return data.intent;
+        }
       }
     } catch (e) {}
 
-    // Fallback — local keyword intent
     return localIntent(command);
   }
 
