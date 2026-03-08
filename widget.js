@@ -678,16 +678,105 @@
     await routeCommand(command);
   }
 
+  // ── AI Command Interpreter ─────────────────────────────
+  // Sends ANY command to AI, gets back structured intent
+  async function interpretCommand(command) {
+    try {
+      const rows = getPageContext();
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 12000);
+
+      const res = await fetch(`${BACKEND_URL}/api/agent/interpret`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "x-api-key": API_KEY,
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
+        },
+        body: JSON.stringify({
+          command,
+          rows: rows.slice(0, 15).map(r => ({
+            text: r._allText,
+            amount: r._amount,
+            ...Object.fromEntries(
+              Object.entries(r).filter(([k]) => !k.startsWith("_") && !k.match(/^col\d+$/))
+            )
+          })),
+          pageTitle: document.title,
+          industry: clientInfo?.industry
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.intent) return data.intent;
+      }
+    } catch (e) {}
+
+    // Fallback — local keyword intent
+    return localIntent(command);
+  }
+
+  // ── Local intent fallback (instant, no AI) ─────────────
+  function localIntent(command) {
+    const cmd = command.toLowerCase();
+
+    const isAction = /\b(approve|accept|ok|confirm|pass|allow|grant|yes|process|handle|do|run|execute|mark|update|change|reject|decline|deny|refuse|block|fail|escalate|flag|raise|forward|refer|send|navigate|open|go|click|scroll|fill|type|enter|show|close|select|submit|press|tap)\b/.test(cmd);
+
+    if (!isAction) return { type: "chat" };
+
+    const action =
+      /\b(reject|decline|deny|refuse|block|fail|turn down|not approve)\b/.test(cmd) ? "rejected" :
+      /\b(escalate|flag|raise|forward|refer|send up|review|hold)\b/.test(cmd) ? "escalate" :
+      /\b(navigate|open|go to|go|click|scroll|fill|type|enter|show|close|press|tap)\b/.test(cmd) ? "page" :
+      "approved";
+
+    if (action === "page") return { type: "page", command };
+
+    return { type: "task", action, command };
+  }
+
   // ── Command Router ──────────────────────────────────────
   async function routeCommand(command) {
-    const cmd = command.toLowerCase().trim();
+    isProcessing = true;
+    document.getElementById("af-input").disabled = true;
+    document.getElementById("af-send").disabled = true;
 
-    // Action keywords anywhere in the sentence
-    const actionWords = /\b(approve|accept|reject|decline|deny|escalate|flag|process|click|open|go to|navigate|scroll|fill|type|enter|show|close|select|submit|press|tap|handle|execute|run|do|perform|mark|update|change)\b/;
+    const thinking = addMsg("thinking", "🧠 Understanding your instruction...");
 
-    if (actionWords.test(cmd)) {
-      await processCommand(command);
-    } else {
+    try {
+      const intent = await interpretCommand(command);
+      thinking.remove();
+
+      if (intent.type === "chat") {
+        isProcessing = false;
+        document.getElementById("af-input").disabled = false;
+        document.getElementById("af-send").disabled = false;
+        await chat(command);
+        return;
+      }
+
+      if (intent.type === "page") {
+        isProcessing = false;
+        document.getElementById("af-input").disabled = false;
+        document.getElementById("af-send").disabled = false;
+        const handled = handleGeneralCommand(intent.command || command);
+        if (!handled) await chat(command);
+        return;
+      }
+
+      // type === "task" — execute on the page
+      isProcessing = false;
+      document.getElementById("af-input").disabled = false;
+      document.getElementById("af-send").disabled = false;
+      await processCommand(command, intent);
+
+    } catch (err) {
+      thinking.remove();
+      isProcessing = false;
+      document.getElementById("af-input").disabled = false;
+      document.getElementById("af-send").disabled = false;
       await chat(command);
     }
   }
@@ -864,25 +953,23 @@
   }
 
   // ── Process Command — Page Actions ─────────────────────
-  async function processCommand(command) {
+  async function processCommand(command, intent = null) {
     isProcessing = true;
     document.getElementById("af-input").disabled = true;
     document.getElementById("af-send").disabled = true;
 
     try {
       const thinking = addMsg("thinking", "🔍 Scanning page...");
-      await sleep(400);
+      await sleep(300);
 
       const pendingRows = getPageContext();
-      thinking.innerHTML = `🧠 Found ${pendingRows.length} item${pendingRows.length !== 1 ? "s" : ""} — processing...`;
-      await sleep(500);
+      thinking.innerHTML = `🧠 Found ${pendingRows.length} item${pendingRows.length !== 1 ? "s" : ""} — filtering...`;
+      await sleep(300);
       thinking.remove();
 
       if (pendingRows.length === 0) {
-        // No table rows — try as a general page command first
         const handled = handleGeneralCommand(command);
         if (!handled) {
-          // Nothing matched — let chat handle it naturally
           isProcessing = false;
           document.getElementById("af-input").disabled = false;
           document.getElementById("af-send").disabled = false;
@@ -891,14 +978,15 @@
         return;
       }
 
-      // Determine action from command
+      // Use AI-provided action if available, otherwise infer from command
       const cmd = command.toLowerCase();
-      const action = (cmd.includes("reject") || cmd.includes("decline") || cmd.includes("deny")) ? "rejected"
-        : (cmd.includes("escalate") || cmd.includes("flag")) ? "escalate"
-        : "approved"; // approve / accept / handle / process / do / run → approved
+      const action = intent?.action ||
+        ((cmd.includes("reject") || cmd.includes("decline") || cmd.includes("deny")) ? "rejected" :
+        (cmd.includes("escalate") || cmd.includes("flag")) ? "escalate" :
+        "approved");
 
-      // Filter rows
-      const targets = filterRows(pendingRows, command);
+      // Filter rows — use AI filter if available
+      const targets = filterRows(pendingRows, command, intent?.filter || null);
 
       if (targets.length === 0) {
         // Nothing matched in table — try as general page command
@@ -1157,7 +1245,21 @@
   }
 
   // ── Smart Filter ───────────────────────────────────────
-  function filterRows(rows, command) {
+  function filterRows(rows, command, aiFilter = null) {
+    // If AI gave us a structured filter, use it — no keyword guessing
+    if (aiFilter) {
+      let matched = [...rows];
+      if (aiFilter.plan) matched = matched.filter(r => r._allText.includes(aiFilter.plan.toLowerCase()));
+      if (aiFilter.keyword) matched = matched.filter(r => r._allText.includes(aiFilter.keyword.toLowerCase()));
+      if (aiFilter.excludeKeyword) matched = matched.filter(r => !r._allText.includes(aiFilter.excludeKeyword.toLowerCase()));
+      if (aiFilter.amountOp && aiFilter.amountValue != null) {
+        const val = aiFilter.amountValue;
+        if (aiFilter.amountOp === "<") matched = matched.filter(r => r._amount && r._amount < val);
+        if (aiFilter.amountOp === ">") matched = matched.filter(r => r._amount && r._amount > val);
+      }
+      return matched;
+    }
+
     const cmd = command.toLowerCase();
     const { basePart, conditions } = parseConditions(command);
 
