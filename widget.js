@@ -683,7 +683,7 @@
     const cmd = command.toLowerCase().trim();
 
     // Action keywords anywhere in the sentence
-    const actionWords = /\b(approve|reject|escalate|flag|process|click|open|go to|navigate|scroll|fill|type|enter|show|close|select|submit|press|tap)\b/;
+    const actionWords = /\b(approve|accept|reject|decline|deny|escalate|flag|process|click|open|go to|navigate|scroll|fill|type|enter|show|close|select|submit|press|tap|handle|execute|run|do|perform|mark|update|change)\b/;
 
     if (actionWords.test(cmd)) {
       await processCommand(command);
@@ -893,9 +893,9 @@
 
       // Determine action from command
       const cmd = command.toLowerCase();
-      const action = cmd.includes("reject") ? "rejected"
-        : cmd.includes("escalate") || cmd.includes("flag") ? "escalate"
-        : "approved";
+      const action = (cmd.includes("reject") || cmd.includes("decline") || cmd.includes("deny")) ? "rejected"
+        : (cmd.includes("escalate") || cmd.includes("flag")) ? "escalate"
+        : "approved"; // approve / accept / handle / process / do / run → approved
 
       // Filter rows
       const targets = filterRows(pendingRows, command);
@@ -1165,13 +1165,21 @@
     let matched = rows;
 
     // Amount-only base (no condition splitter)
-    const underMatch = basePart.match(/under\s+[₦$#]?\s*([\d,]+)/);
-    const aboveMatch = basePart.match(/(?:above|over)\s+[₦$#]?\s*([\d,]+)/);
+    const underMatch = basePart.match(/(?:under|below|less than)\s+[₦$#]?\s*([\d,]+k?)/);
+    const aboveMatch = basePart.match(/(?:above|over|more than|greater than)\s+[₦$#]?\s*([\d,]+k?)/);
+
+    function parseAmount(str) {
+      if (!str) return 0;
+      const clean = str.replace(/,/g, "").toLowerCase();
+      if (clean.endsWith("k")) return parseInt(clean) * 1000;
+      return parseInt(clean);
+    }
+
     if (underMatch) {
-      const limit = parseInt(underMatch[1].replace(/,/g, ""));
+      const limit = parseAmount(underMatch[1]);
       matched = rows.filter(r => r._amount && r._amount < limit);
     } else if (aboveMatch) {
-      const limit = parseInt(aboveMatch[1].replace(/,/g, ""));
+      const limit = parseAmount(aboveMatch[1]);
       matched = rows.filter(r => r._amount && r._amount > limit);
     }
 
