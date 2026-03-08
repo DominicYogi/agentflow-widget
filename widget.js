@@ -1072,62 +1072,158 @@
     return allRows;
   }
 
+  // ── Condition Parser ────────────────────────────────────
+  // Breaks "approve Gold but only if under ₦100k" into
+  // { base: "gold", conditions: [{ type: "amount", op: "<", value: 100000 }] }
+  function parseConditions(command) {
+    const cmd = command.toLowerCase();
+
+    // Split on condition keywords
+    const conditionSplitters = /\bbut\b|\bbut only\b|\bonly if\b|\bunless\b|\bexcept\b|\bexcept when\b|\bonly when\b|\bas long as\b|\bwhere\b|\bif\b/;
+    const parts = cmd.split(conditionSplitters);
+    const basePart = parts[0].trim();
+    const condPart = parts.slice(1).join(" ").trim();
+
+    const conditions = [];
+
+    if (condPart) {
+      // Amount conditions
+      const underMatch = condPart.match(/(?:amount|value|cost)?\s*(?:is\s+)?under\s+[₦$#]?\s*([\d,]+)/);
+      const aboveMatch = condPart.match(/(?:amount|value|cost)?\s*(?:is\s+)?(?:above|over)\s+[₦$#]?\s*([\d,]+)/);
+      const belowMatch = condPart.match(/(?:amount|value|cost)?\s*(?:is\s+)?(?:below|less than)\s+[₦$#]?\s*([\d,]+)/);
+      const exactMatch = condPart.match(/(?:amount|value|cost)?\s*(?:is\s+)?\s*[₦$#]?\s*([\d,]+)/);
+
+      if (underMatch || belowMatch) {
+        const val = parseInt((underMatch || belowMatch)[1].replace(/,/g, ""));
+        conditions.push({ type: "amount", op: "<", value: val });
+      }
+      if (aboveMatch) {
+        const val = parseInt(aboveMatch[1].replace(/,/g, ""));
+        conditions.push({ type: "amount", op: ">", value: val });
+      }
+
+      // Plan conditions
+      if (condPart.includes("gold"))   conditions.push({ type: "text", field: "_allText", includes: "gold" });
+      if (condPart.includes("silver")) conditions.push({ type: "text", field: "_allText", includes: "silver" });
+      if (condPart.includes("bronze")) conditions.push({ type: "text", field: "_allText", includes: "bronze" });
+
+      // Procedure conditions
+      const routineKeywords = ["scan", "test", "examination", "panel", "check", "x-ray", "ultrasound", "diagnostic"];
+      const surgicalKeywords = ["surgery", "appendectomy", "operation", "transplant", "surgical"];
+
+      if (condPart.includes("routine") || routineKeywords.some(k => condPart.includes(k))) {
+        conditions.push({ type: "procedure", keywords: routineKeywords });
+      }
+      if (condPart.includes("surg") || condPart.includes("surgical")) {
+        conditions.push({ type: "procedure", keywords: surgicalKeywords });
+      }
+
+      // NOT conditions — "unless X", "except X", "not X"
+      const isNegated = /\bunless\b|\bexcept\b|\bnot\b|\bno\b/.test(cmd.split(conditionSplitters)[0] === basePart
+        ? condPart : cmd);
+
+      if (isNegated) conditions.forEach(c => c.negate = true);
+
+      // Specific text match — "if hospital is Lagos General", "if marked as emergency"
+      const markedAs = condPart.match(/(?:marked as|tagged as|labeled as|status is|type is)\s+(.+?)(?:\s|$)/);
+      const fieldIs = condPart.match(/(?:hospital|member|procedure|plan|name)\s+is\s+(.+?)(?:\s+|$)/);
+      if (markedAs) conditions.push({ type: "text", field: "_allText", includes: markedAs[1].trim() });
+      if (fieldIs)  conditions.push({ type: "text", field: "_allText", includes: fieldIs[1].trim() });
+    }
+
+    return { basePart, condPart, conditions };
+  }
+
+  // ── Apply a single condition to a row ──────────────────
+  function rowPassesCondition(row, condition) {
+    let passes = false;
+
+    if (condition.type === "amount") {
+      const amt = row._amount || 0;
+      if (condition.op === "<") passes = amt < condition.value;
+      if (condition.op === ">") passes = amt > condition.value;
+      if (condition.op === "=") passes = amt === condition.value;
+    }
+
+    if (condition.type === "text") {
+      passes = row._allText?.includes(condition.includes);
+    }
+
+    if (condition.type === "procedure") {
+      passes = condition.keywords.some(k => row._allText?.includes(k));
+    }
+
+    return condition.negate ? !passes : passes;
+  }
+
   // ── Smart Filter ───────────────────────────────────────
   function filterRows(rows, command) {
     const cmd = command.toLowerCase();
+    const { basePart, conditions } = parseConditions(command);
 
-    // Amount filters
-    const underMatch = cmd.match(/under\s+[₦$#]?\s*([\d,]+)/);
-    const aboveMatch = cmd.match(/(?:above|over)\s+[₦$#]?\s*([\d,]+)/);
+    // ── Step 1: Filter by base subject ────────────────────
+    let matched = rows;
+
+    // Amount-only base (no condition splitter)
+    const underMatch = basePart.match(/under\s+[₦$#]?\s*([\d,]+)/);
+    const aboveMatch = basePart.match(/(?:above|over)\s+[₦$#]?\s*([\d,]+)/);
     if (underMatch) {
       const limit = parseInt(underMatch[1].replace(/,/g, ""));
-      return rows.filter(r => r._amount && r._amount < limit);
-    }
-    if (aboveMatch) {
+      matched = rows.filter(r => r._amount && r._amount < limit);
+    } else if (aboveMatch) {
       const limit = parseInt(aboveMatch[1].replace(/,/g, ""));
-      return rows.filter(r => r._amount && r._amount > limit);
+      matched = rows.filter(r => r._amount && r._amount > limit);
     }
 
-    // Plan filters — check all cell values
-    if (cmd.includes("gold"))   return rows.filter(r => r._allText.includes("gold"));
-    if (cmd.includes("bronze")) return rows.filter(r => r._allText.includes("bronze"));
-    if (cmd.includes("silver")) return rows.filter(r => r._allText.includes("silver"));
+    // Plan
+    if (basePart.includes("gold"))   matched = matched.filter(r => r._allText.includes("gold"));
+    if (basePart.includes("bronze")) matched = matched.filter(r => r._allText.includes("bronze"));
+    if (basePart.includes("silver")) matched = matched.filter(r => r._allText.includes("silver"));
 
-    // Procedure type filters
+    // Procedure types
     const routineKeywords = ["scan", "test", "examination", "panel", "check", "x-ray", "ultrasound", "diagnostic"];
-    const surgicalKeywords = ["surgery", "appendectomy", "operation", "transplant", "surgical", "surg"];
-    const therapyKeywords = ["therapy", "dialysis", "session", "physiotherapy"];
+    const surgicalKeywords = ["surgery", "appendectomy", "operation", "transplant", "surgical"];
+    const therapyKeywords  = ["therapy", "dialysis", "session", "physiotherapy"];
 
-    if (cmd.includes("routine") || cmd.includes("diagnostic") || routineKeywords.some(k => cmd.includes(k))) {
-      return rows.filter(r => routineKeywords.some(k => r._allText.includes(k)));
+    if (basePart.includes("routine") || basePart.includes("diagnostic") ||
+        routineKeywords.some(k => basePart.includes(k))) {
+      matched = matched.filter(r => routineKeywords.some(k => r._allText.includes(k)));
     }
-    if (cmd.includes("surg") || cmd.includes("surgical")) {
-      return rows.filter(r => surgicalKeywords.some(k => r._allText.includes(k)));
+    if (basePart.includes("surg")) {
+      matched = matched.filter(r => surgicalKeywords.some(k => r._allText.includes(k)));
     }
-    if (cmd.includes("therap") || cmd.includes("dialysis") || cmd.includes("session")) {
-      return rows.filter(r => therapyKeywords.some(k => r._allText.includes(k)));
+    if (basePart.includes("therap") || basePart.includes("dialysis")) {
+      matched = matched.filter(r => therapyKeywords.some(k => r._allText.includes(k)));
     }
 
-    // Status filters
-    if (cmd.includes("pending")) return rows.filter(r => r._allText.includes("pending"));
+    // Status
+    if (basePart.includes("pending"))  matched = matched.filter(r => r._allText.includes("pending"));
 
-    // Extract meaningful subject — remove action words AND numbers
-    const subject = cmd
-      .replace(/\b(approve|reject|escalate|flag|process|click|all|every|the|pending|request|requests|item|items|procedure|procedures|plan|plans|high.value|routine|low.value)\b/g, "")
-      .replace(/\b\d+\b/g, "") // remove numbers like "2"
+    // Generic subject extraction from base
+    const subject = basePart
+      .replace(/\b(approve|reject|escalate|flag|process|all|every|the|pending|request|requests|item|items|procedure|procedures|plan|plans)\b/g, "")
+      .replace(/\b\d+\b/g, "")
       .replace(/\s+/g, " ")
       .trim();
 
-    if (subject.length > 1) {
-      const matched = rows.filter(r => r._allText.includes(subject));
-      if (matched.length > 0) return matched;
+    if (subject.length > 2 && matched.length === rows.length) {
+      const subjectMatch = rows.filter(r => r._allText.includes(subject));
+      if (subjectMatch.length > 0) matched = subjectMatch;
     }
 
-    // Default — all rows only if command says "all" or "every"
-    if (cmd.includes("all") || cmd.includes("every")) return rows;
+    // ── Step 2: Apply conditions ───────────────────────────
+    if (conditions.length > 0) {
+      matched = matched.filter(row =>
+        conditions.every(condition => rowPassesCondition(row, condition))
+      );
+    }
 
-    // Last resort — return all
-    return rows;
+    // Default — all rows if nothing narrowed it down and command says "all"
+    if (matched.length === rows.length && !cmd.includes("all") && !cmd.includes("every") && subject.length <= 2) {
+      return rows;
+    }
+
+    return matched;
   }
 
   // ── Execute Action on Universal Row ────────────────────
