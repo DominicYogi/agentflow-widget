@@ -13,9 +13,11 @@
   const theme = THEMES[THEME] || THEMES.blue;
 
   // ── State ─────────────────────────────────────────────
-  let clientInfo   = null;
-  let isProcessing = false;
-  let pendingPlan  = null; // holds task plan waiting for user confirmation
+  let clientInfo          = null;
+  let isProcessing        = false;
+  let pendingPlan         = null;
+  let conversationHistory = [];        // persists across pages via sessionStorage
+  const SESSION_KEY       = "af_conv_" + (API_KEY || "default");
 
   // ── Styles ────────────────────────────────────────────
   const style = document.createElement("style");
@@ -243,18 +245,67 @@
   launcher.addEventListener("click", () => panel.classList.toggle("open"));
   document.getElementById("af-close").addEventListener("click", () => panel.classList.remove("open"));
 
+  // ── Session storage helpers ──────────────────────────
+  function saveSession() {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        history: conversationHistory.slice(-40), // keep last 40 exchanges
+        clientInfo
+      }));
+    } catch (e) {}
+  }
+
+  function loadSession() {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  }
+
+  function clearSession() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+    conversationHistory = [];
+  }
+
   // ── Message helpers ───────────────────────────────────
-  function addMsg(type, html) {
+  // persist=true saves to session (false for ephemeral msgs like "thinking")
+  function addMsg(type, html, persist = true) {
     const msgs = document.getElementById("af-messages");
     const el = document.createElement("div");
     el.className = "af-msg " + type;
     el.innerHTML = html;
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
+
+    // Save to history (skip thinking/confirm bubbles)
+    if (persist && type !== "thinking") {
+      conversationHistory.push({ type, html, time: Date.now() });
+      saveSession();
+    }
+
     return el;
   }
+
   function clearMessages() {
     document.getElementById("af-messages").innerHTML = "";
+  }
+
+  // Restore messages from session into the panel
+  function restoreMessages() {
+    if (conversationHistory.length === 0) return false;
+    clearMessages();
+    // Show last 20 messages so panel doesn't get overwhelming
+    conversationHistory.slice(-20).forEach(m => {
+      const msgs = document.getElementById("af-messages");
+      const el = document.createElement("div");
+      el.className = "af-msg " + m.type;
+      el.innerHTML = m.html;
+      msgs.appendChild(el);
+    });
+    const msgs = document.getElementById("af-messages");
+    msgs.scrollTop = msgs.scrollHeight;
+    return true;
   }
   function updateUsage(used, limit) {
     const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
@@ -509,10 +560,16 @@
     setInputLocked(true);
     addMsg("user", message);
 
-    const thinking = addMsg("thinking", "🧠 Thinking...");
+    const thinking = addMsg("thinking", "🧠 Thinking...", false); // ephemeral
 
     try {
       const pageContext = scanPage();
+
+      // Build history for Groq — last 10 exchanges only (keep tokens low)
+      const historyForAI = conversationHistory.slice(-20).map(m => ({
+        role: m.type === "user" ? "user" : "assistant",
+        content: m.html.replace(/<[^>]+>/g, "") // strip HTML tags
+      }));
 
       const res = await fetch(`${BACKEND_URL}/api/agent/message`, {
         method: "POST",
@@ -521,7 +578,7 @@
           "Content-Type": "application/json",
           "ngrok-skip-browser-warning": "true"
         },
-        body: JSON.stringify({ message, pageContext })
+        body: JSON.stringify({ message, pageContext, history: historyForAI })
       });
 
       thinking.remove();
@@ -628,7 +685,7 @@
 
       if (!data.success) {
         clearMessages();
-        addMsg("error", `⚠️ ${data.error || "Could not connect."}`);
+        addMsg("error", `⚠️ ${data.error || "Could not connect."}`, false);
         return;
       }
 
@@ -636,20 +693,36 @@
       document.getElementById("af-client-name").textContent = clientInfo.name;
       updateUsage(clientInfo.tasksUsed, clientInfo.tasksLimit);
 
-      clearMessages();
-      addMsg("agent",
-        `👋 Hello! I'm your AI agent for <strong>${clientInfo.name}</strong>.<br><br>` +
-        `I can see your page and understand natural language. Just tell me what you want done — ` +
-        `I'll always show you exactly what I'm about to do before acting.<br><br>` +
-        `<em>What would you like me to handle?</em>`
-      );
+      // ── Restore previous session if available ────────────
+      const session = loadSession();
+      if (session?.history?.length > 0) {
+        conversationHistory = session.history;
+        restoreMessages();
+
+        // Add a subtle page-change notice
+        const pageNote = document.createElement("div");
+        pageNote.style.cssText = "text-align:center;font-size:11px;color:#bbb;padding:4px 0;";
+        pageNote.textContent = `— now on: ${document.title} —`;
+        document.getElementById("af-messages").appendChild(pageNote);
+        document.getElementById("af-messages").scrollTop = 999999;
+
+      } else {
+        // Fresh session — show welcome
+        clearMessages();
+        addMsg("agent",
+          `👋 Hello! I'm your AI agent for <strong>${clientInfo.name}</strong>.<br><br>` +
+          `I can see your page and understand natural language. Just tell me what you want done — ` +
+          `I'll always show you exactly what I'm about to do before acting.<br><br>` +
+          `<em>What would you like me to handle?</em>`
+        );
+      }
 
       setInputLocked(false);
       loadChips();
 
     } catch (err) {
       clearMessages();
-      addMsg("error", "⚠️ Could not connect to AgentFlow backend.");
+      addMsg("error", "⚠️ Could not connect to AgentFlow backend.", false);
       console.error("AgentFlow init:", err);
     }
   }
