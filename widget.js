@@ -714,9 +714,11 @@
   async function interpretCommand(command) {
     try {
       const rows = getPageContext();
+      const cmd = command.toLowerCase();
 
-      // Try to capture screenshot for vision
-      const screenshot = await captureScreenshot();
+      // Only take screenshot for actual task commands — not chat
+      const isTaskCommand = /approve|accept|reject|decline|escalate|flag|process|handle|all|every|under|above|below|gold|silver|bronze|surgical|routine|pending/.test(cmd);
+      const screenshot = isTaskCommand ? await captureScreenshot() : null;
 
       const controller = new AbortController();
       setTimeout(() => controller.abort(), 25000);
