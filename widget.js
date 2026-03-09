@@ -6,289 +6,201 @@
   const THEME = document.currentScript?.getAttribute("data-theme") || "blue";
 
   const THEMES = {
-    blue: { primary: "#0052cc", light: "#e8f0fe", accent: "#003d99" },
+    blue:  { primary: "#0052cc", light: "#e8f0fe", accent: "#003d99" },
     green: { primary: "#27ae60", light: "#e8f5e9", accent: "#219150" },
-    dark: { primary: "#1a1a2e", light: "#f0f0f0", accent: "#16213e" },
+    dark:  { primary: "#1a1a2e", light: "#f0f0f0", accent: "#16213e" },
   };
   const theme = THEMES[THEME] || THEMES.blue;
 
   // ── State ─────────────────────────────────────────────
-  let clientInfo = null;
+  let clientInfo   = null;
   let isProcessing = false;
+  let pendingPlan  = null; // holds task plan waiting for user confirmation
 
-  // ── Inject Styles ─────────────────────────────────────
+  // ── Styles ────────────────────────────────────────────
   const style = document.createElement("style");
   style.textContent = `
+    * { box-sizing: border-box; }
+
     #af-launcher {
       position: fixed; bottom: 30px; right: 30px;
-      width: 56px; height: 56px;
+      width: 58px; height: 58px;
       background: ${theme.primary};
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer;
-      box-shadow: 0 4px 20px ${theme.primary}66;
+      box-shadow: 0 4px 24px ${theme.primary}55;
       z-index: 9999;
-      transition: all 0.3s ease;
-      font-size: 24px;
-      border: none;
+      transition: transform 0.2s, box-shadow 0.2s;
+      font-size: 26px; border: none;
     }
-    #af-launcher:hover { transform: scale(1.1); }
+    #af-launcher:hover { transform: scale(1.08); box-shadow: 0 6px 28px ${theme.primary}77; }
 
     #af-panel {
-      position: fixed; bottom: 100px; right: 30px;
-      width: 390px;
+      position: fixed; bottom: 106px; right: 30px;
+      width: 400px;
       background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 10px 50px rgba(0,0,0,0.15);
+      border-radius: 18px;
+      box-shadow: 0 12px 56px rgba(0,0,0,0.16);
       z-index: 9998;
-      display: none;
-      flex-direction: column;
+      display: none; flex-direction: column;
       overflow: hidden;
       border: 1px solid #e0e0e0;
-      font-family: Arial, sans-serif;
-      animation: af-slide-up 0.25s ease;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      animation: af-up 0.22s ease;
+      max-height: 620px;
     }
-    @keyframes af-slide-up {
-      from { opacity: 0; transform: translateY(16px); }
-      to { opacity: 1; transform: translateY(0); }
+    @keyframes af-up {
+      from { opacity:0; transform:translateY(14px); }
+      to   { opacity:1; transform:translateY(0); }
     }
     #af-panel.open { display: flex; }
 
+    /* Header */
     #af-header {
       background: ${theme.primary};
-      color: white;
-      padding: 14px 18px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      color: white; padding: 14px 16px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-shrink: 0;
     }
-    #af-header .af-title { font-size: 14px; font-weight: bold; }
-    #af-header .af-sub { font-size: 11px; opacity: 0.7; margin-top: 2px; }
-    #af-header .af-status {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 11px; opacity: 0.9;
-    }
+    .af-hinfo .af-title { font-size: 14px; font-weight: 700; }
+    .af-hinfo .af-sub   { font-size: 11px; opacity: 0.72; margin-top: 2px; }
+    .af-hright { display: flex; align-items: center; gap: 10px; }
     .af-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: #00FF88;
-      animation: af-pulse 2s infinite;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #00FF88; animation: af-pulse 2s infinite;
     }
-    @keyframes af-pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    #af-close {
-      cursor: pointer; font-size: 18px;
-      opacity: 0.7; margin-left: 12px;
-    }
-    #af-close:hover { opacity: 1; }
+    @keyframes af-pulse { 0%,100%{opacity:1}50%{opacity:0.35} }
+    #af-close { cursor:pointer; font-size:18px; opacity:0.75; }
+    #af-close:hover { opacity:1; }
 
+    /* Usage bar */
     #af-usage {
       background: ${theme.light};
-      padding: 8px 16px;
-      font-size: 11px;
+      padding: 7px 16px; font-size: 11px;
       color: ${theme.primary};
-      display: flex;
-      justify-content: space-between;
-      border-bottom: 1px solid #e8e8e8;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid #e4e4e4; flex-shrink: 0;
     }
-    .af-usage-bar {
-      height: 3px;
-      background: #ddd;
-      border-radius: 2px;
-      margin-top: 4px;
-    }
-    .af-usage-fill {
-      height: 100%;
-      background: ${theme.primary};
-      border-radius: 2px;
-      transition: width 0.5s ease;
-    }
+    .af-bar { width: 100px; height: 4px; background: #ddd; border-radius: 2px; }
+    .af-bar-fill { height:100%; background: ${theme.primary}; border-radius:2px; transition: width 0.5s; }
 
+    /* Messages */
     #af-messages {
-      flex: 1;
-      padding: 14px;
+      flex: 1; padding: 14px 14px 6px;
       overflow-y: auto;
-      max-height: 320px;
-      min-height: 180px;
-      background: #f8f9fa;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      background: #f7f8fa;
+      display: flex; flex-direction: column; gap: 10px;
+      min-height: 200px;
     }
     .af-msg {
-      max-width: 88%;
-      padding: 10px 14px;
-      border-radius: 12px;
-      font-size: 13px;
-      line-height: 1.5;
+      max-width: 86%; padding: 10px 14px;
+      border-radius: 14px; font-size: 13px; line-height: 1.55;
+      word-break: break-word;
     }
     .af-msg.user {
-      background: ${theme.primary};
-      color: white;
-      align-self: flex-end;
-      border-bottom-right-radius: 4px;
+      background: ${theme.primary}; color: white;
+      align-self: flex-end; border-bottom-right-radius: 4px;
     }
     .af-msg.agent {
-      background: white;
-      color: #333;
-      align-self: flex-start;
-      border: 1px solid #e0e0e0;
+      background: white; color: #222;
+      align-self: flex-start; border: 1px solid #e2e2e2;
       border-bottom-left-radius: 4px;
     }
     .af-msg.thinking {
-      color: #999;
-      font-style: italic;
-      background: white;
-      border: 1px dashed #ddd;
-      align-self: flex-start;
+      background: white; color: #aaa; font-style: italic;
+      border: 1px dashed #ddd; align-self: flex-start;
     }
-    .af-msg.action-approve {
-      background: #e8f5e9;
-      color: #2e7d32;
-      align-self: flex-start;
-      border: 1px solid #c8e6c9;
-      font-size: 12px;
-      border-radius: 8px;
+    .af-msg.success {
+      background: #e8f5e9; color: #2e7d32;
+      border: 1px solid #c8e6c9; align-self: flex-start;
+      border-bottom-left-radius: 4px; font-size: 12.5px;
     }
-    .af-msg.action-reject {
-      background: #fdecea;
-      color: #c62828;
-      align-self: flex-start;
-      border: 1px solid #ffcdd2;
-      font-size: 12px;
-      border-radius: 8px;
+    .af-msg.error {
+      background: #fdecea; color: #c62828;
+      border: 1px solid #ffcdd2; align-self: flex-start;
+      border-bottom-left-radius: 4px; font-size: 12.5px;
     }
-    .af-msg.action-escalate {
-      background: #fff8e1;
-      color: #f57f17;
-      align-self: flex-start;
-      border: 1px solid #ffe082;
-      font-size: 12px;
-      border-radius: 8px;
+    .af-msg.warning {
+      background: #fff8e1; color: #e65100;
+      border: 1px solid #ffe082; align-self: flex-start;
+      border-bottom-left-radius: 4px; font-size: 12.5px;
     }
 
-    .af-chips {
-      display: flex; flex-wrap: wrap; gap: 6px;
-      padding: 8px 14px 10px;
-      background: #f8f9fa;
+    /* Confirm card — shown inside messages */
+    .af-confirm-card {
+      background: white; border: 1.5px solid ${theme.primary}44;
+      border-radius: 12px; padding: 14px 16px;
+      align-self: flex-start; max-width: 90%;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .af-confirm-label {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+      color: ${theme.primary}; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .af-confirm-text {
+      font-size: 13px; color: #333; line-height: 1.5; margin-bottom: 12px;
+    }
+    .af-confirm-btns { display: flex; gap: 8px; }
+    .af-confirm-btns button {
+      flex: 1; padding: 9px 0; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.18s;
+    }
+    .af-btn-yes { background: ${theme.primary}; color: white; }
+    .af-btn-no  { background: #f0f0f0; color: #555; }
+    .af-confirm-btns button:hover { opacity: 0.85; }
+    .af-confirm-btns button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Chips */
+    #af-chips {
+      padding: 6px 14px 10px; background: #f7f8fa;
+      display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
     }
     .af-chip {
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 16px;
-      padding: 5px 12px;
-      font-size: 11px;
-      cursor: pointer;
-      color: ${theme.primary};
-      transition: all 0.2s;
+      background: white; border: 1px solid #ddd;
+      border-radius: 16px; padding: 5px 12px;
+      font-size: 11px; cursor: pointer; color: ${theme.primary};
+      transition: all 0.18s;
     }
-    .af-chip:hover {
-      background: ${theme.primary};
-      color: white;
-      border-color: ${theme.primary};
-    }
+    .af-chip:hover { background: ${theme.primary}; color: white; border-color: ${theme.primary}; }
 
+    /* Input */
     #af-input-area {
-      padding: 12px;
-      border-top: 1px solid #e0e0e0;
-      display: flex;
-      gap: 8px;
-      background: white;
+      padding: 10px 12px; border-top: 1px solid #e6e6e6;
+      display: flex; gap: 7px; background: white; flex-shrink: 0;
     }
     #af-input {
-      flex: 1;
-      padding: 10px 14px;
-      border: 1px solid #ddd;
-      border-radius: 24px;
-      font-size: 13px;
-      outline: none;
-      font-family: Arial, sans-serif;
+      flex: 1; padding: 10px 14px;
+      border: 1.5px solid #ddd; border-radius: 24px;
+      font-size: 13px; outline: none;
+      font-family: inherit; transition: border-color 0.18s;
     }
     #af-input:focus { border-color: ${theme.primary}; }
     #af-input:disabled { background: #f5f5f5; color: #aaa; }
-    #af-send {
-      background: ${theme.primary};
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 38px; height: 38px;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.2s;
-      flex-shrink: 0;
+    #af-send, #af-mic {
+      width: 38px; height: 38px; border-radius: 50%;
+      border: none; cursor: pointer; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.18s; flex-shrink: 0;
     }
+    #af-send { background: ${theme.primary}; color: white; }
     #af-send:hover { background: ${theme.accent}; }
     #af-send:disabled { background: #ccc; cursor: not-allowed; }
-
-    #af-mic {
-      background: white;
-      color: #555;
-      border: 1px solid #ddd;
-      border-radius: 50%;
-      width: 38px; height: 38px;
-      cursor: pointer;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-      flex-shrink: 0;
-    }
+    #af-mic { background: white; color: #666; border: 1.5px solid #ddd; }
     #af-mic:hover { border-color: ${theme.primary}; color: ${theme.primary}; }
     #af-mic:disabled { opacity: 0.4; cursor: not-allowed; }
-    #af-mic.listening {
-      background: #ff4444;
-      color: white;
-      border-color: #ff4444;
-      animation: af-pulse 1s infinite;
-    }
+    #af-mic.listening { background: #e53935; color: white; border-color: #e53935; animation: af-pulse 0.8s infinite; }
 
-    .af-confirm-preview {
-      font-size: 13px;
-      line-height: 1.6;
-      margin-bottom: 10px;
-    }
-    .af-confirm-buttons {
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .af-confirm-yes, .af-confirm-no {
-      flex: 1;
-      padding: 8px 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    }
-    .af-confirm-yes { background: #27ae60; color: white; }
-    .af-confirm-no  { background: #e74c3c; color: white; }
-    .af-confirm-yes:hover, .af-confirm-no:hover { opacity: 0.85; }
-
+    /* Branding */
     #af-branding {
-      text-align: center;
-      font-size: 10px;
-      color: #bbb;
-      padding: 6px;
-      background: white;
-      border-top: 1px solid #f5f5f5;
+      text-align: center; font-size: 10px; color: #ccc;
+      padding: 5px; background: white; border-top: 1px solid #f0f0f0; flex-shrink: 0;
     }
-    #af-branding a {
-      color: ${theme.primary};
-      text-decoration: none;
-      font-weight: bold;
-    }
+    #af-branding a { color: ${theme.primary}; text-decoration: none; font-weight: 700; }
   `;
   document.head.appendChild(style);
 
-  // ── Build Widget HTML ──────────────────────────────────
+  // ── Build HTML ────────────────────────────────────────
   const launcher = document.createElement("button");
   launcher.id = "af-launcher";
   launcher.type = "button";
@@ -299,1462 +211,449 @@
   panel.id = "af-panel";
   panel.innerHTML = `
     <div id="af-header">
-      <div>
+      <div class="af-hinfo">
         <div class="af-title">🤖 AgentFlow AI</div>
         <div class="af-sub" id="af-client-name">Connecting...</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div class="af-status">
-          <div class="af-dot"></div>
-          <span id="af-status-text">Live</span>
+      <div class="af-hright">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;">
+          <div class="af-dot"></div><span>Live</span>
         </div>
         <span id="af-close">✕</span>
       </div>
     </div>
     <div id="af-usage">
-      <span id="af-usage-text">Loading usage...</span>
-      <span id="af-tasks-left"></span>
+      <span id="af-usage-text">Loading...</span>
+      <div class="af-bar"><div class="af-bar-fill" id="af-bar-fill" style="width:0%"></div></div>
     </div>
     <div id="af-messages">
       <div class="af-msg thinking">Connecting to your AI agent...</div>
     </div>
-    <div class="af-chips" id="af-chips"></div>
+    <div id="af-chips"></div>
     <div id="af-input-area">
-      <input id="af-input" type="text" placeholder="Say or type an instruction..." disabled />
-      <button id="af-mic" type="button" disabled title="Click to speak">🎤</button>
+      <input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />
+      <button id="af-mic" type="button" title="Click to speak" disabled>🎤</button>
       <button id="af-send" type="button" disabled>➤</button>
     </div>
     <div id="af-branding">Powered by <a href="#">AgentFlow</a></div>
   `;
   document.body.appendChild(panel);
 
-  // ── Toggle Panel ───────────────────────────────────────
+  // ── Panel toggle ──────────────────────────────────────
   launcher.addEventListener("click", () => panel.classList.toggle("open"));
   document.getElementById("af-close").addEventListener("click", () => panel.classList.remove("open"));
 
-  // ── Voice Recognition ──────────────────────────────────
+  // ── Message helpers ───────────────────────────────────
+  function addMsg(type, html) {
+    const msgs = document.getElementById("af-messages");
+    const el = document.createElement("div");
+    el.className = "af-msg " + type;
+    el.innerHTML = html;
+    msgs.appendChild(el);
+    msgs.scrollTop = msgs.scrollHeight;
+    return el;
+  }
+  function clearMessages() {
+    document.getElementById("af-messages").innerHTML = "";
+  }
+  function updateUsage(used, limit) {
+    const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+    document.getElementById("af-usage-text").textContent = `${used} / ${limit} tasks used`;
+    document.getElementById("af-bar-fill").style.width = pct + "%";
+  }
+
+  // ── Voice recognition ─────────────────────────────────
   const micBtn = document.getElementById("af-mic");
   let recognition = null;
 
   if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = "en-US";
 
-    recognition.onstart = () => {
-      micBtn.classList.add("listening");
-      micBtn.title = "Listening...";
-      document.getElementById("af-input").placeholder = "Listening...";
-    };
+    recognition.onstart  = () => { micBtn.classList.add("listening"); document.getElementById("af-input").placeholder = "Listening..."; };
+    recognition.onend    = () => { micBtn.classList.remove("listening"); document.getElementById("af-input").placeholder = "Ask me anything or give me a task..."; };
+    recognition.onerror  = () => { micBtn.classList.remove("listening"); document.getElementById("af-input").placeholder = "Ask me anything or give me a task..."; };
+    recognition.onresult = (e) => { document.getElementById("af-input").value = e.results[0][0].transcript; handleSend(); };
 
-    recognition.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
-      document.getElementById("af-input").value = transcript;
-      micBtn.classList.remove("listening");
-      document.getElementById("af-input").placeholder = "Say or type an instruction...";
-      handleSend();
-    };
-
-    recognition.onerror = () => {
-      micBtn.classList.remove("listening");
-      document.getElementById("af-input").placeholder = "Say or type an instruction...";
-    };
-
-    recognition.onend = () => {
-      micBtn.classList.remove("listening");
-      document.getElementById("af-input").placeholder = "Say or type an instruction...";
-    };
-
-    micBtn.addEventListener("click", () => {
-      if (micBtn.classList.contains("listening")) {
-        recognition.stop();
-      } else {
-        recognition.start();
-      }
-    });
+    micBtn.addEventListener("click", () => micBtn.classList.contains("listening") ? recognition.stop() : recognition.start());
   } else {
-    micBtn.title = "Voice not supported in this browser";
     micBtn.style.opacity = "0.3";
+    micBtn.title = "Voice not supported";
   }
 
-  // ── General Page Command Handler ───────────────────────
-  function handleGeneralCommand(command) {
-    const cmd = command.toLowerCase().trim();
-
-    // Scroll commands
-    if (cmd.includes("scroll down")) { window.scrollBy(0, 300); addMsg("action-approve", "⬇️ Scrolled down"); return true; }
-    if (cmd.includes("scroll up")) { window.scrollBy(0, -300); addMsg("action-approve", "⬆️ Scrolled up"); return true; }
-    if (cmd.includes("scroll to top")) { window.scrollTo(0, 0); addMsg("action-approve", "⬆️ Scrolled to top"); return true; }
-    if (cmd.includes("scroll to bottom")) { window.scrollTo(0, document.body.scrollHeight); addMsg("action-approve", "⬇️ Scrolled to bottom"); return true; }
-
-    // Extract the target from natural language
-    // "open contact page", "can you open contact", "go to reports", "click members", "show me settings"
-    const navMatch = cmd.match(/(?:open(?:\s+up)?|go\s+to|navigate\s+to|visit|show(?:\s+me)?)\s+(?:the\s+|a\s+)?(.+?)(?:\s+page|\s+section|\s+tab)?$/);
-    const clickMatch = cmd.match(/(?:click|press|tap|select|hit)\s+(?:the\s+|on\s+)?(.+?)(?:\s+button|\s+link)?$/);
-    const fillMatch = cmd.match(/(?:fill|type|enter|input|put)\s+(.+?)\s+(?:in|into|with)\s+(.+)/);
-
-    if (fillMatch) return tryFill(fillMatch[2], fillMatch[1]);
-
-    const target = navMatch?.[1] || clickMatch?.[1];
-    if (target) {
-      const trimmed = target.trim();
-      // Try clicking a link or button matching the target
-      const found = tryClickElement(trimmed) || tryNavigate(trimmed);
-      return found;
+  // ── Page scanner — sends full DOM context to AI ───────
+  function scanPage() {
+    let idCounter = 0;
+    function afId(el) {
+      if (!el.dataset.afId) el.dataset.afId = "af_" + idCounter++;
+      return el.dataset.afId;
     }
 
-    return false;
-  }
+    const buttons = [], inputs = [], links = [], tables = [];
 
-  function tryClickElement(targetText) {
-    const allClickable = [
-      ...document.querySelectorAll("button, a, [role='button'], input[type='submit'], input[type='button']")
-    ].filter(el => !el.closest("#af-panel"));
-
-    // Find best match by text content
-    const target = allClickable.find(el => {
-      const text = (el.textContent || el.value || el.title || "").toLowerCase().trim();
-      return text.includes(targetText.toLowerCase()) || targetText.toLowerCase().includes(text);
+    document.querySelectorAll("button,[role='button'],input[type='button'],input[type='submit']").forEach(el => {
+      if (el.id === "af-launcher" || el.closest("#af-panel")) return;
+      buttons.push({ afId: afId(el), type: "button", text: (el.textContent || el.value || "").trim().slice(0, 60), id: el.id || null, disabled: el.disabled });
     });
 
-    if (target) {
-      target.style.outline = "2px solid #0052cc";
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => {
-        target.style.outline = "";
-        target.click();
-      }, 500);
-      addMsg("action-approve", `🖱️ <strong>CLICKED</strong> — "${target.textContent.trim() || targetText}"`);
-      return true;
-    }
-
-    addMsg("action-escalate", `⚠️ Could not find a button or link matching "<strong>${targetText}</strong>" on this page.`);
-    return false;
-  }
-
-  function tryNavigate(targetText) {
-    const allLinks = [...document.querySelectorAll("a[href]")]
-      .filter(el => !el.closest("#af-panel"));
-
-    const target = allLinks.find(el => {
-      const text = (el.textContent || el.title || "").toLowerCase().trim();
-      const href = (el.href || "").toLowerCase();
-      return text.includes(targetText.toLowerCase()) ||
-        href.includes(targetText.toLowerCase().replace(/\s+/g, ""));
+    document.querySelectorAll("input:not([type='button']):not([type='submit']),textarea,select").forEach(el => {
+      if (el.id === "af-input" || el.closest("#af-panel")) return;
+      inputs.push({ afId: afId(el), type: el.tagName.toLowerCase(), placeholder: el.placeholder || null, label: el.labels?.[0]?.textContent?.trim() || null, id: el.id || null, value: el.value || null });
     });
 
-    if (target) {
-      target.style.outline = "2px solid #0052cc";
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
-      addMsg("action-approve", `🔗 <strong>NAVIGATING</strong> — "${target.textContent.trim() || targetText}"`);
-      setTimeout(() => { target.click(); }, 600);
-      return true;
-    }
-
-    addMsg("action-escalate", `⚠️ Could not find a link to "<strong>${targetText}</strong>" on this page.`);
-    return false;
-  }
-
-  function tryFill(fieldTarget, value) {
-    const allInputs = [...document.querySelectorAll("input, textarea, select")]
-      .filter(el => !el.closest("#af-panel") && el.id !== "af-input");
-
-    const target = allInputs.find(el => {
-      const label = (el.labels?.[0]?.textContent || el.placeholder || el.name || el.id || "").toLowerCase();
-      return label.includes(fieldTarget.toLowerCase());
+    document.querySelectorAll("a[href]").forEach(el => {
+      if (el.closest("#af-panel")) return;
+      links.push({ afId: afId(el), type: "link", text: el.textContent.trim().slice(0, 60), href: el.href || null });
     });
 
-    if (target) {
-      target.focus();
-      target.value = value;
-      target.dispatchEvent(new Event("input", { bubbles: true }));
-      target.dispatchEvent(new Event("change", { bubbles: true }));
-      target.style.outline = "2px solid #27ae60";
-      setTimeout(() => { target.style.outline = ""; }, 1000);
-      addMsg("action-approve", `✏️ <strong>FILLED</strong> — "${fieldTarget}" with "${value}"`);
-      return true;
-    }
-
-    addMsg("action-escalate", `⚠️ Could not find a field matching "<strong>${fieldTarget}</strong>"`);
-    return false;
-  }
-
-  // ── Add Message ────────────────────────────────────────
-  function addMsg(type, html) {
-    const msgs = document.getElementById("af-messages");
-    const div = document.createElement("div");
-    div.className = `af-msg ${type}`;
-    div.innerHTML = html;
-    msgs.appendChild(div);
-    msgs.scrollTop = msgs.scrollHeight;
-    return div;
-  }
-
-  function clearMessages() {
-    document.getElementById("af-messages").innerHTML = "";
-  }
-
-  // ── Update Usage Bar ───────────────────────────────────
-  function updateUsage(used, limit) {
-    const pct = Math.min((used / limit) * 100, 100).toFixed(0);
-    document.getElementById("af-usage-text").innerHTML =
-      `Tasks used: <strong>${used.toLocaleString()} / ${limit.toLocaleString()}</strong>`;
-    document.getElementById("af-tasks-left").textContent =
-      `${(limit - used).toLocaleString()} remaining`;
-  }
-
-  // ── Smart Dynamic Chips ────────────────────────────────
-  function renderChips(chips) {
-    const container = document.getElementById("af-chips");
-    container.innerHTML = chips.map(c =>
-      `<span class="af-chip">${c}</span>`
-    ).join("");
-    container.querySelectorAll(".af-chip").forEach(chip => {
-      chip.addEventListener("click", () => {
-        document.getElementById("af-input").value = chip.textContent;
-        handleSend();
-      });
-    });
-  }
-
-  function generateSmartChips(rows, industry) {
-    const chips = [];
-    if (rows.length === 0) return ["No pending items found"];
-
-    // Group by plan
-    const plans = {};
-    rows.forEach(r => {
-      plans[r.plan] = (plans[r.plan] || 0) + 1;
+    document.querySelectorAll("table").forEach(table => {
+      if (table.closest("#af-panel")) return;
+      const headers = Array.from(table.querySelectorAll("th")).map(th => th.textContent.trim());
+      const rows = Array.from(table.querySelectorAll("tbody tr")).map(row => ({
+        afId: afId(row),
+        id: row.id || null,
+        cells: Array.from(row.querySelectorAll("td")).map(td => td.textContent.trim().slice(0, 60)),
+        status: row.querySelector(".badge,.status")?.textContent?.trim() || null
+      }));
+      tables.push({ afId: afId(table), type: "table", id: table.id || null, headers, rows: rows.slice(0, 30) });
     });
 
-    // Group by procedure type
-    const routineKeywords = ["scan", "test", "examination", "panel", "check"];
-    const surgicalKeywords = ["surgery", "appendectomy", "operation"];
-    const routineRows = rows.filter(r =>
-      routineKeywords.some(k => r.procedure.toLowerCase().includes(k))
-    );
-    const surgicalRows = rows.filter(r =>
-      surgicalKeywords.some(k => r.procedure.toLowerCase().includes(k))
-    );
+    return {
+      pageTitle: document.title,
+      url: window.location.href,
+      pageText: document.body.innerText.slice(0, 600),
+      buttons, inputs, links, tables
+    };
+  }
 
-    // Amount analysis
-    const lowValue = rows.filter(r => r.amount < 50000);
-    const highValue = rows.filter(r => r.amount > 200000);
+  // ── Action executor ───────────────────────────────────
+  async function executeActions(actions) {
+    let successCount = 0;
+    const results = [];
 
-    // Generate contextual chips based on what's actually on the page
-    if (lowValue.length > 0) {
-      chips.push(`Approve ${lowValue.length} request${lowValue.length > 1 ? "s" : ""} under ₦50,000`);
-    }
+    for (const action of actions) {
+      await sleep(400);
+      try {
+        // Find element
+        let el = action.afId ? document.querySelector(`[data-af-id="${action.afId}"]`) : null;
+        if (!el && action.elementId) el = document.getElementById(action.elementId);
+        if (!el && action.selector)  el = document.querySelector(action.selector);
 
-    Object.entries(plans).forEach(([plan, count]) => {
-      if (plan === "Gold") {
-        chips.push(`Approve all ${count} Gold plan request${count > 1 ? "s" : ""}`);
-      } else if (plan === "Bronze" && highValue.filter(r => r.plan === "Bronze").length > 0) {
-        const bronzeHigh = highValue.filter(r => r.plan === "Bronze").length;
-        chips.push(`Reject ${bronzeHigh} Bronze request${bronzeHigh > 1 ? "s" : ""} above ₦200,000`);
+        if (!el && action.type !== "navigate" && action.type !== "scroll") {
+          results.push({ ok: false, msg: `Could not find element for: <em>${action.description}</em>` });
+          continue;
+        }
+
+        // Highlight
+        if (el) {
+          const origOutline = el.style.outline;
+          const origBg = el.style.background;
+          el.style.outline = `2px solid ${theme.primary}`;
+          el.style.background = theme.light;
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          await sleep(350);
+          el.style.outline = origOutline;
+          el.style.background = origBg;
+        }
+
+        switch (action.type) {
+          case "click":
+            el.click();
+            results.push({ ok: true, msg: `🖱️ Clicked <strong>${action.description}</strong>` });
+            break;
+
+          case "fill":
+            el.focus();
+            el.value = action.value;
+            el.dispatchEvent(new Event("input",  { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            results.push({ ok: true, msg: `✏️ Filled <strong>${action.description}</strong> → "${action.value}"` });
+            break;
+
+          case "select":
+            el.value = action.value;
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            results.push({ ok: true, msg: `📋 Selected <strong>${action.description}</strong> → "${action.value}"` });
+            break;
+
+          case "approve_row":
+            const appBtn = el.querySelector(".btn-approve,[class*='approve']")
+              || Array.from(el.querySelectorAll("button")).find(b => /approve/i.test(b.textContent));
+            if (appBtn) { appBtn.click(); results.push({ ok: true, msg: `✅ Approved — <strong>${action.description}</strong>` }); }
+            else results.push({ ok: false, msg: `⚠️ No approve button found in row: <strong>${action.description}</strong>` });
+            break;
+
+          case "reject_row":
+            const rejBtn = el.querySelector(".btn-reject,[class*='reject']")
+              || Array.from(el.querySelectorAll("button")).find(b => /reject/i.test(b.textContent));
+            if (rejBtn) { rejBtn.click(); results.push({ ok: true, msg: `❌ Rejected — <strong>${action.description}</strong>` }); }
+            else results.push({ ok: false, msg: `⚠️ No reject button found in row: <strong>${action.description}</strong>` });
+            break;
+
+          case "escalate_row":
+            const escBtn = el.querySelector(".btn-escalate,[class*='escalate']")
+              || Array.from(el.querySelectorAll("button")).find(b => /escalate|flag|hold/i.test(b.textContent));
+            if (escBtn) { escBtn.click(); results.push({ ok: true, msg: `⚠️ Escalated — <strong>${action.description}</strong>` }); }
+            else {
+              // Fallback: highlight row yellow and mark it
+              el.style.background = "#fff8e1";
+              el.style.outline = "2px solid #f57f17";
+              results.push({ ok: true, msg: `⚠️ Flagged for escalation — <strong>${action.description}</strong>` });
+            }
+            break;
+
+          case "navigate":
+            results.push({ ok: true, msg: `🔗 Navigating to <strong>${action.description}</strong>` });
+            await sleep(300);
+            window.location.href = action.value;
+            break;
+
+          case "scroll":
+            if (action.value === "top")    window.scrollTo({ top: 0, behavior: "smooth" });
+            if (action.value === "bottom") window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+            if (action.value === "down")   window.scrollBy({ top: 300, behavior: "smooth" });
+            if (action.value === "up")     window.scrollBy({ top: -300, behavior: "smooth" });
+            results.push({ ok: true, msg: `↕️ Scrolled <strong>${action.value}</strong>` });
+            break;
+
+          default:
+            results.push({ ok: false, msg: `Unknown action type: ${action.type}` });
+        }
+        if (results[results.length-1]?.ok) successCount++;
+
+      } catch (err) {
+        results.push({ ok: false, msg: `Error: ${err.message}` });
       }
-    });
-
-    if (routineRows.length > 0) {
-      chips.push(`Approve ${routineRows.length} routine diagnostic${routineRows.length > 1 ? "s" : ""}`);
     }
 
-    if (surgicalRows.length > 0) {
-      chips.push(`Escalate ${surgicalRows.length} surgical procedure${surgicalRows.length > 1 ? "s" : ""}`);
+    // Show results
+    const okMsgs  = results.filter(r => r.ok);
+    const errMsgs = results.filter(r => !r.ok);
+
+    if (okMsgs.length > 0) {
+      addMsg("success", okMsgs.map(r => r.msg).join("<br>"));
+    }
+    if (errMsgs.length > 0) {
+      addMsg("error", errMsgs.map(r => r.msg).join("<br>"));
     }
 
-    if (highValue.length > 0 && chips.length < 4) {
-      chips.push(`Escalate ${highValue.length} high-value request${highValue.length > 1 ? "s" : ""} above ₦200,000`);
-    }
-
-    // Always have at least one fallback
-    if (chips.length === 0) {
-      chips.push(`Approve all ${rows.length} pending requests`);
-      chips.push("Escalate all to senior staff");
-    }
-
-    return chips.slice(0, 4); // max 4 chips
+    // Log to backend
+    fetch(`${BACKEND_URL}/api/agent/confirm`, {
+      method: "POST",
+      headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+      body: JSON.stringify({
+        command: pendingPlan?.originalCommand || "",
+        action: pendingPlan?.taskType || "task",
+        pageTitle: document.title,
+        rowCount: actions.length,
+        results: results.map(r => r.msg)
+      })
+    }).catch(() => {});
   }
 
-  async function loadSmartChips(industry) {
-    // Step 1 — instantly show local smart chips based on page data
-    const rows = getPageContext();
-    const localChips = generateSmartChips(rows, industry);
-    renderChips(localChips);
+  // ── Show confirmation card ────────────────────────────
+  function showConfirmCard(reply, plan) {
+    pendingPlan = plan;
 
-    // Step 2 — try to upgrade with AI-generated chips in background
+    const card = document.createElement("div");
+    card.className = "af-confirm-card";
+    card.innerHTML = `
+      <div class="af-confirm-label">⚡ Planned Action</div>
+      <div class="af-confirm-text">${reply}</div>
+      <div class="af-confirm-btns">
+        <button class="af-btn-yes" type="button">✅ Yes, do it</button>
+        <button class="af-btn-no"  type="button">✕ Cancel</button>
+      </div>
+    `;
+
+    const msgs = document.getElementById("af-messages");
+    msgs.appendChild(card);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    // Lock input while waiting
+    setInputLocked(true);
+
+    card.querySelector(".af-btn-yes").addEventListener("click", async () => {
+      card.querySelector(".af-btn-yes").disabled = true;
+      card.querySelector(".af-btn-no").disabled  = true;
+      card.querySelector(".af-confirm-label").textContent = "⏳ Executing...";
+
+      await executeActions(plan.actions || []);
+
+      card.remove();
+      pendingPlan = null;
+      setInputLocked(false);
+    });
+
+    card.querySelector(".af-btn-no").addEventListener("click", () => {
+      card.remove();
+      pendingPlan = null;
+      addMsg("agent", "Alright, cancelled. What else can I help you with?");
+      setInputLocked(false);
+    });
+  }
+
+  // ── Lock/unlock input ─────────────────────────────────
+  function setInputLocked(locked) {
+    isProcessing = locked;
+    document.getElementById("af-input").disabled = locked;
+    document.getElementById("af-send").disabled  = locked;
+    document.getElementById("af-mic").disabled   = locked;
+  }
+
+  // ── Send message to backend ───────────────────────────
+  async function sendMessage(message) {
+    setInputLocked(true);
+    addMsg("user", message);
+
+    const thinking = addMsg("thinking", "🧠 Thinking...");
+
     try {
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), 8000); // 8 second limit
+      const pageContext = scanPage();
 
-      const res = await fetch(`${BACKEND_URL}/api/agent/suggest`, {
+      const res = await fetch(`${BACKEND_URL}/api/agent/message`, {
         method: "POST",
-        signal: controller.signal,
         headers: {
           "x-api-key": API_KEY,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
         },
-        body: JSON.stringify({
-          industry,
-          rows: rows.slice(0, 10)
-        })
+        body: JSON.stringify({ message, pageContext })
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.suggestions?.length > 0) {
-          renderChips(data.suggestions);
+      thinking.remove();
+
+      if (!res.ok) throw new Error("Backend error " + res.status);
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Unknown error");
+
+      const response = data.response;
+
+      if (response.type === "chat") {
+        // Pure conversation
+        addMsg("agent", response.reply);
+        setInputLocked(false);
+
+      } else if (response.type === "task") {
+        // AI wants to do something — show confirmation first
+        if (response.plan?.actions?.length > 0) {
+          response.plan.originalCommand = message;
+          showConfirmCard(response.reply, response.plan);
+          // Input stays locked until user confirms or cancels
+        } else {
+          // AI planned a task but found nothing to act on
+          addMsg("agent", response.reply);
+          setInputLocked(false);
         }
+
+      } else {
+        addMsg("agent", response.reply || "Done.");
+        setInputLocked(false);
       }
+
     } catch (err) {
-      // Silently keep local chips — no error shown to user
+      thinking.remove();
+      addMsg("error", "⚠️ Something went wrong. Check that the server is running.");
+      console.error("AgentFlow error:", err);
+      setInputLocked(false);
     }
   }
 
-  // ── Load html2canvas for screenshots ──────────────────
-  function loadHtml2Canvas() {
-    return new Promise((resolve) => {
-      if (typeof html2canvas !== "undefined") return resolve();
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-      s.onload = resolve;
-      s.onerror = resolve; // fail silently
-      document.head.appendChild(s);
-    });
+  // ── Send handler ──────────────────────────────────────
+  function handleSend() {
+    if (isProcessing) return;
+    const input = document.getElementById("af-input");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    sendMessage(text);
   }
 
-  // ── Initialize — Call Backend Status ──────────────────
-  async function init() {
-    // Load vision library silently in background
-    loadHtml2Canvas();
+  document.getElementById("af-send").addEventListener("click", e => { e.preventDefault(); handleSend(); });
+  document.getElementById("af-input").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); handleSend(); } });
+
+  // ── Smart chips ───────────────────────────────────────
+  async function loadChips() {
+    const chipEl = document.getElementById("af-chips");
+
+    const defaultChips = ["Approve all pending", "Reject flagged items", "Escalate high-value", "Show summary"];
+    renderChips(defaultChips);
 
     try {
+      const pageContext = scanPage();
+      const rows = pageContext.tables?.[0]?.rows?.slice(0, 8) || [];
+      const res = await fetch(`${BACKEND_URL}/api/agent/suggest`, {
+        method: "POST",
+        headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+        body: JSON.stringify({ industry: clientInfo?.industry, rows })
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.success && d.suggestions?.length) renderChips(d.suggestions);
+      }
+    } catch (e) {}
+
+    function renderChips(labels) {
+      chipEl.innerHTML = "";
+      labels.slice(0, 5).forEach(label => {
+        const chip = document.createElement("button");
+        chip.className = "af-chip";
+        chip.type = "button";
+        chip.textContent = label;
+        chip.addEventListener("click", () => {
+          if (!isProcessing) {
+            document.getElementById("af-input").value = label;
+            handleSend();
+          }
+        });
+        chipEl.appendChild(chip);
+      });
+    }
+  }
+
+  // ── Utility ───────────────────────────────────────────
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // ── Init ──────────────────────────────────────────────
+  async function init() {
+    try {
       const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
-        headers: { "x-api-key": API_KEY }
+        headers: { "x-api-key": API_KEY, "ngrok-skip-browser-warning": "true" }
       });
       const data = await res.json();
 
       if (!data.success) {
         clearMessages();
-        addMsg("agent", `⚠️ ${data.error}`);
+        addMsg("error", `⚠️ ${data.error || "Could not connect."}`);
         return;
       }
 
       clientInfo = data.client;
-
-      // Update header
       document.getElementById("af-client-name").textContent = clientInfo.name;
       updateUsage(clientInfo.tasksUsed, clientInfo.tasksLimit);
 
-      // Load smart dynamic chips
-      loadSmartChips(clientInfo.industry);
-
-      // Enable input and mic
-      document.getElementById("af-input").disabled = false;
-      document.getElementById("af-send").disabled = false;
-      document.getElementById("af-mic").disabled = false;
-
-      // Welcome message
       clearMessages();
       addMsg("agent",
-        `👋 Hello! I'm your AI agent for <strong>${clientInfo.name}</strong>.<br><br>
-        I can see your dashboard and I'm ready to execute tasks for you.<br><br>
-        <em>What would you like me to handle?</em>`
+        `👋 Hello! I'm your AI agent for <strong>${clientInfo.name}</strong>.<br><br>` +
+        `I can see your page and understand natural language. Just tell me what you want done — ` +
+        `I'll always show you exactly what I'm about to do before acting.<br><br>` +
+        `<em>What would you like me to handle?</em>`
       );
+
+      setInputLocked(false);
+      loadChips();
 
     } catch (err) {
       clearMessages();
-      addMsg("agent", "⚠️ Could not connect to AgentFlow backend. Make sure the server is running.");
-      console.error("AgentFlow init error:", err);
+      addMsg("error", "⚠️ Could not connect to AgentFlow backend.");
+      console.error("AgentFlow init:", err);
     }
   }
 
-  // ── Send Handler ───────────────────────────────────────
-  document.getElementById("af-send").addEventListener("click", e => {
-    e.preventDefault();
-    handleSend();
-  });
-  document.getElementById("af-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleSend();
-    }
-  });
-
-  async function handleSend() {
-    if (isProcessing) return;
-    const input = document.getElementById("af-input");
-    const command = input.value.trim();
-    if (!command) return;
-    input.value = "";
-    addMsg("user", command);
-    await routeCommand(command);
-  }
-
-  // ── Screenshot helper ──────────────────────────────────
-  async function captureScreenshot() {
-    try {
-      // Use html2canvas if available
-      if (typeof html2canvas !== "undefined") {
-        const canvas = await html2canvas(document.body, {
-          scale: 0.6,
-          useCORS: true,
-          allowTaint: true,
-          ignoreElements: el => el.id === "af-panel" || el.id === "af-launcher"
-        });
-        return canvas.toDataURL("image/jpeg", 0.7);
-      }
-    } catch (e) {}
-    return null;
-  }
-
-  // ── AI Command Interpreter ─────────────────────────────
-  async function interpretCommand(command) {
-    try {
-      const rows = getPageContext();
-      const cmd = command.toLowerCase();
-
-      // Only take screenshot for actual task commands — not chat
-      const isTaskCommand = /approve|accept|reject|decline|escalate|flag|process|handle|all|every|under|above|below|gold|silver|bronze|surgical|routine|pending/.test(cmd);
-      const screenshot = isTaskCommand ? await captureScreenshot() : null;
-
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), 25000);
-
-      const res = await fetch(`${BACKEND_URL}/api/agent/interpret`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "x-api-key": API_KEY,
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true"
-        },
-        body: JSON.stringify({
-          command,
-          screenshot,  // base64 image — Claude sees the actual page
-          rows: rows.slice(0, 15).map(r => ({
-            text: r._allText,
-            amount: r._amount,
-            ...Object.fromEntries(
-              Object.entries(r).filter(([k]) => !k.startsWith("_") && !k.match(/^col\d+$/))
-            )
-          })),
-          pageTitle: document.title,
-          industry: clientInfo?.industry
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.intent) {
-          if (data.source === "vision") console.log("👁️ AgentFlow used vision");
-          return data.intent;
-        }
-      }
-    } catch (e) {}
-
-    return localIntent(command);
-  }
-
-  // ── Local intent fallback (instant, no AI) ─────────────
-  function localIntent(command) {
-    const cmd = command.toLowerCase();
-
-    // Page commands
-    if (/\b(navigate|open|go to|click|scroll|press|tap)\b/.test(cmd)) {
-      return { type: "page", command };
-    }
-
-    // Determine action
-    const action =
-      /\b(reject|decline|deny|refuse|block|turn down|disapprove)\b/.test(cmd) ? "rejected" :
-      /\b(escalate|flag|raise|forward|refer|hold|review|send up)\b/.test(cmd) ? "escalate" :
-      /\b(approve|accept|pass|allow|grant|confirm|process|handle|ok|yes|do|run|execute)\b/.test(cmd) ? "approved" :
-      null;
-
-    if (!action) return { type: "chat" };
-
-    // ── Build filter from command ──────────────────────────
-    const filter = { plan: null, amountOp: null, amountValue: null, keywords: [], excludeKeyword: null };
-
-    // Amount
-    const underMatch = cmd.match(/(?:under|below|less than)\s+[₦$#]?\s*([\d,]+)(k?)/);
-    const aboveMatch = cmd.match(/(?:above|over|more than)\s+[₦$#]?\s*([\d,]+)(k?)/);
-    if (underMatch) {
-      filter.amountOp = "<";
-      filter.amountValue = parseInt(underMatch[1].replace(/,/g, "")) * (underMatch[2] === "k" ? 1000 : 1);
-    }
-    if (aboveMatch) {
-      filter.amountOp = ">";
-      filter.amountValue = parseInt(aboveMatch[1].replace(/,/g, "")) * (aboveMatch[2] === "k" ? 1000 : 1);
-    }
-
-    // Plan
-    if (cmd.includes("gold"))   filter.plan = "Gold";
-    if (cmd.includes("silver")) filter.plan = "Silver";
-    if (cmd.includes("bronze")) filter.plan = "Bronze";
-
-    // Procedure type keywords — map to actual terms found in rows
-    if (/\bsurgic|surgery|surgeries\b/.test(cmd))   filter.keywords = ["surgery", "appendectomy", "operation", "surgical"];
-    else if (/\broutine|diagnostic|scan|test\b/.test(cmd)) filter.keywords = ["scan", "test", "examination", "panel", "x-ray"];
-    else if (/\btherap|dialysis\b/.test(cmd))        filter.keywords = ["therapy", "dialysis", "session"];
-
-    // Named people — extract capitalized words or words after "named", "with name"
-    const nameMatch = cmd.match(/(?:named?|with name|for)\s+([a-z]+(?:\s+and\s+[a-z]+)*)/);
-    if (nameMatch) {
-      filter.keywords = nameMatch[1].split(/\s+and\s+/).map(n => n.trim());
-    }
-
-    return { type: "task", action, filter };
-  }
-
-  // ── Command Router ──────────────────────────────────────
-  async function routeCommand(command) {
-    isProcessing = true;
-    document.getElementById("af-input").disabled = true;
-    document.getElementById("af-send").disabled = true;
-
-    const thinking = addMsg("thinking", "🧠 Understanding your instruction...");
-
-    try {
-      const intent = await interpretCommand(command);
-      thinking.remove();
-
-      if (intent.type === "chat") {
-        isProcessing = false;
-        document.getElementById("af-input").disabled = false;
-        document.getElementById("af-send").disabled = false;
-        await chat(command);
-        return;
-      }
-
-      if (intent.type === "page") {
-        isProcessing = false;
-        document.getElementById("af-input").disabled = false;
-        document.getElementById("af-send").disabled = false;
-        const handled = handleGeneralCommand(intent.command || command);
-        if (!handled) await chat(command);
-        return;
-      }
-
-      // type === "task" — execute on the page
-      isProcessing = false;
-      document.getElementById("af-input").disabled = false;
-      document.getElementById("af-send").disabled = false;
-      await processCommand(command, intent);
-
-    } catch (err) {
-      thinking.remove();
-      isProcessing = false;
-      document.getElementById("af-input").disabled = false;
-      document.getElementById("af-send").disabled = false;
-      await chat(command);
-    }
-  }
-
-  // ── Conversational AI Chat ──────────────────────────────
-  async function chat(message) {
-    isProcessing = true;
-    document.getElementById("af-input").disabled = true;
-    document.getElementById("af-send").disabled = true;
-
-    const thinking = addMsg("thinking", "💭 Thinking...");
-
-    try {
-      // Get page context to give AI awareness
-      const rows = getPageContext();
-      const pageTitle = document.title;
-
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), 20000);
-
-      const res = await fetch(`${BACKEND_URL}/api/agent/chat`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "x-api-key": API_KEY,
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true"
-        },
-        body: JSON.stringify({
-          message,
-          context: {
-            clientName: clientInfo?.name,
-            industry: clientInfo?.industry,
-            pageTitle,
-            rowCount: rows.length,
-            rowSummary: rows.slice(0, 5).map(r =>
-              Object.entries(r)
-                .filter(([k]) => !k.startsWith("_"))
-                .slice(0, 4)
-                .map(([k, v]) => `${k}: ${v}`)
-                .join(", ")
-            )
-          }
-        })
-      });
-
-      thinking.remove();
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.reply) {
-          addMsg("agent", data.reply);
-          return;
-        }
-      }
-
-      // Fallback — local smart responses
-      throw new Error("Backend unavailable");
-
-    } catch (err) {
-      thinking.remove();
-      // Local conversational fallback
-      addMsg("agent", localChat(message));
-    } finally {
-      isProcessing = false;
-      document.getElementById("af-input").disabled = false;
-      document.getElementById("af-send").disabled = false;
-    }
-  }
-
-  // ── Local Chat Fallback ─────────────────────────────────
-  function localChat(message) {
-    const msg = message.toLowerCase();
-    const name = clientInfo?.name || "your system";
-    const rows = getPageContext();
-    const rowCount = rows.length;
-
-    // Greetings
-    if (msg.match(/^(hi|hello|hey|good morning|good afternoon|sup|yo)\b/)) {
-      return `👋 Hello! I'm your AI agent for <strong>${name}</strong>.<br><br>
-        I can see <strong>${rowCount} items</strong> on this page. I can:<br>
-        • Execute tasks — <em>"Approve all Gold plan"</em><br>
-        • Navigate — <em>"Open Reports"</em><br>
-        • Answer questions about what's on the page<br><br>
-        What would you like me to do?`;
-    }
-
-    // What can you do
-    if (msg.includes("what can you do") || msg.includes("help") || msg.includes("how do")) {
-      return `Here's what I can do on <strong>${name}</strong>:<br><br>
-        🗂️ <strong>Process table items</strong><br>
-        <em>"Approve all Gold plan requests"</em><br>
-        <em>"Reject Bronze above ₦200,000"</em><br>
-        <em>"Escalate all surgical procedures"</em><br><br>
-        🖱️ <strong>Control the page</strong><br>
-        <em>"Click Members"</em>, <em>"Open Reports"</em><br>
-        <em>"Scroll down"</em><br><br>
-        📊 <strong>Answer questions</strong><br>
-        <em>"How many pending items?"</em><br>
-        <em>"What's on this page?"</em>`;
-    }
-
-    // How many / count questions
-    if (msg.includes("how many") || msg.includes("count")) {
-      return `I can see <strong>${rowCount} items</strong> on this page right now.`;
-    }
-
-    // What's on the page
-    if (msg.includes("what") && (msg.includes("page") || msg.includes("screen") || msg.includes("see"))) {
-      if (rowCount > 0) {
-        const sample = rows.slice(0, 3).map(r =>
-          Object.entries(r).filter(([k]) => !k.startsWith("_")).slice(0, 3).map(([, v]) => v).join(" · ")
-        ).join("<br>");
-        return `I can see <strong>${rowCount} items</strong> on this page. Here are the first few:<br><br>${sample}<br><br>Tell me what you'd like me to do with them.`;
-      }
-      return `The page is <strong>${document.title}</strong>. I don't see any table data right now. Try navigating to a section with items.`;
-    }
-
-    // Thanks
-    if (msg.match(/thank|thanks|great|awesome|nice|good job|well done/)) {
-      return `Happy to help! 😊 Anything else you'd like me to handle?`;
-    }
-
-    // Feelings / small talk
-    if (msg.match(/how are you|how r you|you good|you okay/)) {
-      return `I'm doing great, thanks for asking! 😄 Ready to help you work faster. What do you need?`;
-    }
-
-    if (msg.match(/what('?s| is) your name|who are you/)) {
-      return `I'm <strong>AgentFlow</strong> — your AI agent for <strong>${name}</strong>. I can process tasks, navigate the page, and answer questions. What can I do for you?`;
-    }
-
-    if (msg.match(/good morning|good afternoon|good evening|good night/)) {
-      const greeting = msg.includes("morning") ? "Good morning" : msg.includes("afternoon") ? "Good afternoon" : msg.includes("evening") ? "Good evening" : "Good night";
-      return `${greeting}! 👋 Ready when you are. There ${rowCount === 1 ? "is" : "are"} <strong>${rowCount} item${rowCount !== 1 ? "s" : ""}</strong> on the page right now.`;
-    }
-
-    if (msg.match(/okay|ok|sure|alright|got it|understood/)) {
-      return `Got it! Let me know when you need something.`;
-    }
-
-    // Default — just respond naturally, don't show instructions
-    return `I hear you! If you want me to take action, just tell me what to do — like <em>"approve all Gold plan"</em> or <em>"open Reports"</em>. Or ask me anything about what's on the page.`;
-  }
-
-  // ── Confirmation Dialog ─────────────────────────────────
-  function showConfirmation(previewHTML) {
-    return new Promise((resolve) => {
-      const msgDiv = document.createElement("div");
-      msgDiv.className = "af-msg agent af-confirm-msg";
-      msgDiv.innerHTML = `
-        <div class="af-confirm-preview">${previewHTML}</div>
-        <div class="af-confirm-buttons">
-          <button class="af-confirm-yes" type="button">✅ Yes, proceed</button>
-          <button class="af-confirm-no" type="button">❌ Cancel</button>
-        </div>
-      `;
-
-      const msgs = document.getElementById("af-messages");
-      msgs.appendChild(msgDiv);
-      msgs.scrollTop = msgs.scrollHeight;
-
-      msgDiv.querySelector(".af-confirm-yes").addEventListener("click", () => {
-        msgDiv.querySelector(".af-confirm-buttons").remove();
-        msgDiv.querySelector(".af-confirm-preview").innerHTML += "<br><em style='opacity:0.6;font-size:12px'>Confirmed ✓</em>";
-        resolve(true);
-      });
-
-      msgDiv.querySelector(".af-confirm-no").addEventListener("click", () => {
-        msgDiv.remove();
-        resolve(false);
-      });
-    });
-  }
-
-  // ── Process Command — Page Actions ─────────────────────
-  async function processCommand(command, intent = null) {
-    isProcessing = true;
-    document.getElementById("af-input").disabled = true;
-    document.getElementById("af-send").disabled = true;
-
-    try {
-      const thinking = addMsg("thinking", "🔍 Scanning page...");
-      await sleep(300);
-
-      const pendingRows = getPageContext();
-      thinking.innerHTML = `🧠 Found ${pendingRows.length} item${pendingRows.length !== 1 ? "s" : ""} — filtering...`;
-      await sleep(300);
-      thinking.remove();
-
-      if (pendingRows.length === 0) {
-        const handled = handleGeneralCommand(command);
-        if (!handled) {
-          isProcessing = false;
-          document.getElementById("af-input").disabled = false;
-          document.getElementById("af-send").disabled = false;
-          await chat(command);
-        }
-        return;
-      }
-
-      // Use AI-provided action if available, otherwise infer from command
-      const cmd = command.toLowerCase();
-      const action = intent?.action ||
-        ((cmd.includes("reject") || cmd.includes("decline") || cmd.includes("deny")) ? "rejected" :
-        (cmd.includes("escalate") || cmd.includes("flag")) ? "escalate" :
-        "approved");
-
-      // Use AI filter — if empty/null, fall back to local filter
-      const localFallback = localIntent(command);
-      const aiFilter = intent?.filter || null;
-
-      // Merge: use AI filter if it has meaningful content, else use local
-      const hasAiFilter = aiFilter && (
-        aiFilter.plan || aiFilter.amountOp ||
-        (aiFilter.keywords && aiFilter.keywords.length > 0) ||
-        aiFilter.excludeKeyword
-      );
-
-      const activeFilter = hasAiFilter ? aiFilter : (localFallback.filter || null);
-
-      // Filter rows — use best available filter
-      const targets = filterRows(pendingRows, command, activeFilter);
-
-      if (targets.length === 0) {
-        // Nothing matched in table — try as general page command
-        const handled = handleGeneralCommand(command);
-        if (!handled) {
-          addMsg("agent",
-            `🔎 Found ${pendingRows.length} row${pendingRows.length !== 1 ? "s" : ""} on the page but none matched "<strong>${command}</strong>".<br><br>
-            Try being more specific, e.g. <em>"reject all Gold plan"</em> or <em>"approve requests under ₦50,000"</em>`
-          );
-        }
-        return;
-      }
-
-      // ── Show confirmation before doing anything ───────────
-      const icon = action === "approved" ? "✅" : action === "rejected" ? "❌" : "⚠️";
-
-      const preview = targets.map(t => {
-        const namedVals = Object.entries(t)
-          .filter(([k]) => !k.startsWith("_") && !k.match(/^col\d+$/))
-          .slice(0, 3).map(([, v]) => v);
-        const fallbackVals = Object.entries(t)
-          .filter(([k]) => k.match(/^col\d+$/))
-          .slice(0, 3).map(([, v]) => v);
-        return `• ${(namedVals.length > 0 ? namedVals : fallbackVals).join(" · ")}`;
-      }).join("<br>");
-
-      // Unlock input while waiting for confirmation click
-      isProcessing = false;
-      document.getElementById("af-input").disabled = false;
-      document.getElementById("af-send").disabled = false;
-
-      const confirmed = await showConfirmation(
-        `${icon} <strong>${action.toUpperCase()} ${targets.length} item${targets.length !== 1 ? "s" : ""}</strong><br><br>${preview}`
-      );
-
-      // Lock again for execution
-      isProcessing = true;
-      document.getElementById("af-input").disabled = true;
-      document.getElementById("af-send").disabled = true;
-
-      if (!confirmed) {
-        addMsg("agent", "👍 Got it — cancelled. Let me know if you'd like to do something else.");
-        return;
-      }
-
-      addMsg("agent", `Executing now 👇`);
-      await sleep(300);
-
-      let processed = 0;
-      for (const target of targets) {
-        // Scroll to row
-        if (target._rowElement) {
-          target._rowElement.scrollIntoView({ behavior: "smooth", block: "nearest" });
-          target._rowElement.style.outline = "2px solid #0052cc";
-          await sleep(250);
-          target._rowElement.style.outline = "";
-        }
-
-        executeRowAction(target, action);
-
-        const icon = action === "approved" ? "✅" : action === "rejected" ? "❌" : "⚠️";
-        const msgType = action === "approved" ? "action-approve"
-          : action === "rejected" ? "action-reject" : "action-escalate";
-
-        // Build readable summary — prefer named columns over col0/col1
-        const namedEntries = Object.entries(target)
-          .filter(([k]) => !k.startsWith("_") && !k.match(/^col\d+$/))
-          .slice(0, 3)
-          .map(([, v]) => v);
-
-        const fallbackEntries = Object.entries(target)
-          .filter(([k]) => k.match(/^col\d+$/))
-          .slice(0, 3)
-          .map(([, v]) => v);
-
-        const rowSummary = (namedEntries.length > 0 ? namedEntries : fallbackEntries).join(" · ");
-
-        addMsg(msgType, `${icon} <strong>${action.toUpperCase()}</strong> — ${rowSummary || target._rowId || "item"}}`);
-
-        processed++;
-        await sleep(650);
-      }
-
-      await sleep(300);
-      addMsg("agent", `🎉 <strong>Done!</strong> ${processed} item${processed !== 1 ? "s" : ""} processed.`);
-
-      // ── Send audit log to backend ──────────────────────
-      const logItems = targets.map(t => {
-        const vals = Object.entries(t)
-          .filter(([k]) => !k.startsWith("_") && !k.match(/^col\d+$/))
-          .slice(0, 3).map(([, v]) => v);
-        return vals.join(" · ");
-      });
-
-      fetch(`${BACKEND_URL}/api/agent/log`, {
-        method: "POST",
-        headers: {
-          "x-api-key": API_KEY,
-          "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true"
-        },
-        body: JSON.stringify({
-          command,
-          action,
-          items: logItems,
-          pageTitle: document.title
-        })
-      }).catch(() => {}); // fire and forget — don't block UI
-
-    } catch (err) {
-      addMsg("agent", `⚠️ Error: ${err.message}`);
-      console.error(err);
-    } finally {
-      isProcessing = false;
-      document.getElementById("af-input").disabled = false;
-      document.getElementById("af-send").disabled = false;
-    }
-  }
-
-  // ── Universal Page Reader — reads ANY table structure ──
-  function getPageContext() {
-    const allRows = [];
-
-    // Scan every table on the page
-    document.querySelectorAll("table").forEach(table => {
-      if (table.closest("#af-panel")) return;
-
-      // Get headers
-      const headers = Array.from(table.querySelectorAll("th, thead td"))
-        .map(th => th.textContent.trim().toLowerCase());
-
-      // Get all rows
-      table.querySelectorAll("tbody tr, tr").forEach(row => {
-        if (row.querySelector("th")) return; // skip header rows
-        if (row.closest("#af-panel")) return;
-
-        const cells = Array.from(row.querySelectorAll("td"))
-          .map(td => td.textContent.trim());
-
-        if (cells.length === 0) return;
-
-        // Build a dynamic object from headers + cells
-        const rowData = {
-          _rowElement: row,
-          _rowId: row.id || null,
-          _allText: cells.join(" ").toLowerCase(),
-          _status: row.querySelector(".badge, [class*='status'], [class*='badge']")
-            ?.textContent?.trim()?.toLowerCase() || "unknown"
-        };
-
-        // Map cells to header names if available
-        headers.forEach((header, i) => {
-          if (cells[i] !== undefined) rowData[header] = cells[i];
-        });
-
-        // Also store raw cells for fallback
-        cells.forEach((cell, i) => { rowData[`col${i}`] = cell; });
-
-        // Extract amount if any cell looks like money
-        cells.forEach(cell => {
-          const moneyMatch = cell.replace(/,/g, "").match(/[\d]+/);
-          if (moneyMatch && cell.includes("₦") || cell.includes("$") || cell.match(/^\d{3,}/)) {
-            rowData._amount = parseInt(cell.replace(/[^\d]/g, "")) || 0;
-          }
-        });
-
-        allRows.push(rowData);
-      });
-    });
-
-    return allRows;
-  }
-
-  // ── Condition Parser ────────────────────────────────────
-  // Breaks "approve Gold but only if under ₦100k" into
-  // { base: "gold", conditions: [{ type: "amount", op: "<", value: 100000 }] }
-  function parseConditions(command) {
-    const cmd = command.toLowerCase();
-
-    // Split on condition keywords
-    const conditionSplitters = /\bbut\b|\bbut only\b|\bonly if\b|\bunless\b|\bexcept\b|\bexcept when\b|\bonly when\b|\bas long as\b|\bwhere\b|\bif\b/;
-    const parts = cmd.split(conditionSplitters);
-    const basePart = parts[0].trim();
-    const condPart = parts.slice(1).join(" ").trim();
-
-    const conditions = [];
-
-    if (condPart) {
-      // Amount conditions
-      const underMatch = condPart.match(/(?:amount|value|cost)?\s*(?:is\s+)?under\s+[₦$#]?\s*([\d,]+)/);
-      const aboveMatch = condPart.match(/(?:amount|value|cost)?\s*(?:is\s+)?(?:above|over)\s+[₦$#]?\s*([\d,]+)/);
-      const belowMatch = condPart.match(/(?:amount|value|cost)?\s*(?:is\s+)?(?:below|less than)\s+[₦$#]?\s*([\d,]+)/);
-      const exactMatch = condPart.match(/(?:amount|value|cost)?\s*(?:is\s+)?\s*[₦$#]?\s*([\d,]+)/);
-
-      if (underMatch || belowMatch) {
-        const val = parseInt((underMatch || belowMatch)[1].replace(/,/g, ""));
-        conditions.push({ type: "amount", op: "<", value: val });
-      }
-      if (aboveMatch) {
-        const val = parseInt(aboveMatch[1].replace(/,/g, ""));
-        conditions.push({ type: "amount", op: ">", value: val });
-      }
-
-      // Plan conditions
-      if (condPart.includes("gold"))   conditions.push({ type: "text", field: "_allText", includes: "gold" });
-      if (condPart.includes("silver")) conditions.push({ type: "text", field: "_allText", includes: "silver" });
-      if (condPart.includes("bronze")) conditions.push({ type: "text", field: "_allText", includes: "bronze" });
-
-      // Procedure conditions
-      const routineKeywords = ["scan", "test", "examination", "panel", "check", "x-ray", "ultrasound", "diagnostic"];
-      const surgicalKeywords = ["surgery", "appendectomy", "operation", "transplant", "surgical"];
-
-      if (condPart.includes("routine") || routineKeywords.some(k => condPart.includes(k))) {
-        conditions.push({ type: "procedure", keywords: routineKeywords });
-      }
-      if (condPart.includes("surg") || condPart.includes("surgical")) {
-        conditions.push({ type: "procedure", keywords: surgicalKeywords });
-      }
-
-      // NOT conditions — "unless X", "except X", "not X"
-      const isNegated = /\bunless\b|\bexcept\b|\bnot\b|\bno\b/.test(cmd.split(conditionSplitters)[0] === basePart
-        ? condPart : cmd);
-
-      if (isNegated) conditions.forEach(c => c.negate = true);
-
-      // Specific text match — "if hospital is Lagos General", "if marked as emergency"
-      const markedAs = condPart.match(/(?:marked as|tagged as|labeled as|status is|type is)\s+(.+?)(?:\s|$)/);
-      const fieldIs = condPart.match(/(?:hospital|member|procedure|plan|name)\s+is\s+(.+?)(?:\s+|$)/);
-      if (markedAs) conditions.push({ type: "text", field: "_allText", includes: markedAs[1].trim() });
-      if (fieldIs)  conditions.push({ type: "text", field: "_allText", includes: fieldIs[1].trim() });
-    }
-
-    return { basePart, condPart, conditions };
-  }
-
-  // ── Apply a single condition to a row ──────────────────
-  function rowPassesCondition(row, condition) {
-    let passes = false;
-
-    if (condition.type === "amount") {
-      const amt = row._amount || 0;
-      if (condition.op === "<") passes = amt < condition.value;
-      if (condition.op === ">") passes = amt > condition.value;
-      if (condition.op === "=") passes = amt === condition.value;
-    }
-
-    if (condition.type === "text") {
-      passes = row._allText?.includes(condition.includes);
-    }
-
-    if (condition.type === "procedure") {
-      passes = condition.keywords.some(k => row._allText?.includes(k));
-    }
-
-    return condition.negate ? !passes : passes;
-  }
-
-  // ── Smart Filter ───────────────────────────────────────
-  function filterRows(rows, command, aiFilter = null) {
-    // If AI gave us a structured filter, use it — no keyword guessing
-    if (aiFilter) {
-      let matched = [...rows];
-
-      if (aiFilter.plan) matched = matched.filter(r => r._allText.includes(aiFilter.plan.toLowerCase()));
-
-      // keywords can be a string or array — OR logic (match ANY keyword)
-      if (aiFilter.keywords && aiFilter.keywords.length > 0) {
-        matched = matched.filter(r =>
-          aiFilter.keywords.some(k => r._allText.includes(k.toLowerCase()))
-        );
-      } else if (aiFilter.keyword) {
-        // support comma-separated names in a single keyword string
-        const parts = aiFilter.keyword.split(/[,\s]+and\s+|,\s*/).map(p => p.trim().toLowerCase()).filter(Boolean);
-        matched = matched.filter(r => parts.some(k => r._allText.includes(k)));
-      }
-
-      if (aiFilter.excludeKeyword) matched = matched.filter(r => !r._allText.includes(aiFilter.excludeKeyword.toLowerCase()));
-
-      if (aiFilter.amountOp && aiFilter.amountValue != null) {
-        const val = aiFilter.amountValue;
-        if (aiFilter.amountOp === "<") matched = matched.filter(r => r._amount && r._amount < val);
-        if (aiFilter.amountOp === ">") matched = matched.filter(r => r._amount && r._amount > val);
-      }
-
-      return matched;
-    }
-
-    const cmd = command.toLowerCase();
-    const { basePart, conditions } = parseConditions(command);
-
-    // ── Step 1: Filter by base subject ────────────────────
-    let matched = rows;
-
-    // Amount-only base (no condition splitter)
-    const underMatch = basePart.match(/(?:under|below|less than)\s+[₦$#]?\s*([\d,]+k?)/);
-    const aboveMatch = basePart.match(/(?:above|over|more than|greater than)\s+[₦$#]?\s*([\d,]+k?)/);
-
-    function parseAmount(str) {
-      if (!str) return 0;
-      const clean = str.replace(/,/g, "").toLowerCase();
-      if (clean.endsWith("k")) return parseInt(clean) * 1000;
-      return parseInt(clean);
-    }
-
-    if (underMatch) {
-      const limit = parseAmount(underMatch[1]);
-      matched = rows.filter(r => r._amount && r._amount < limit);
-    } else if (aboveMatch) {
-      const limit = parseAmount(aboveMatch[1]);
-      matched = rows.filter(r => r._amount && r._amount > limit);
-    }
-
-    // Plan
-    if (basePart.includes("gold"))   matched = matched.filter(r => r._allText.includes("gold"));
-    if (basePart.includes("bronze")) matched = matched.filter(r => r._allText.includes("bronze"));
-    if (basePart.includes("silver")) matched = matched.filter(r => r._allText.includes("silver"));
-
-    // Procedure types
-    const routineKeywords = ["scan", "test", "examination", "panel", "check", "x-ray", "ultrasound", "diagnostic"];
-    const surgicalKeywords = ["surgery", "appendectomy", "operation", "transplant", "surgical"];
-    const therapyKeywords  = ["therapy", "dialysis", "session", "physiotherapy"];
-
-    if (basePart.includes("routine") || basePart.includes("diagnostic") ||
-        routineKeywords.some(k => basePart.includes(k))) {
-      matched = matched.filter(r => routineKeywords.some(k => r._allText.includes(k)));
-    }
-    if (basePart.includes("surg")) {
-      matched = matched.filter(r => surgicalKeywords.some(k => r._allText.includes(k)));
-    }
-    if (basePart.includes("therap") || basePart.includes("dialysis")) {
-      matched = matched.filter(r => therapyKeywords.some(k => r._allText.includes(k)));
-    }
-
-    // Status
-    if (basePart.includes("pending"))  matched = matched.filter(r => r._allText.includes("pending"));
-
-    // Generic subject extraction from base
-    const subject = basePart
-      .replace(/\b(approve|reject|escalate|flag|process|all|every|the|pending|request|requests|item|items|procedure|procedures|plan|plans)\b/g, "")
-      .replace(/\b\d+\b/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (subject.length > 2 && matched.length === rows.length) {
-      const subjectMatch = rows.filter(r => r._allText.includes(subject));
-      if (subjectMatch.length > 0) matched = subjectMatch;
-    }
-
-    // ── Step 2: Apply conditions ───────────────────────────
-    if (conditions.length > 0) {
-      matched = matched.filter(row =>
-        conditions.every(condition => rowPassesCondition(row, condition))
-      );
-    }
-
-    // Default — all rows if nothing narrowed it down and command says "all"
-    if (matched.length === rows.length && !cmd.includes("all") && !cmd.includes("every") && subject.length <= 2) {
-      return rows;
-    }
-
-    return matched;
-  }
-
-  // ── Execute Action on Universal Row ────────────────────
-  function executeRowAction(rowData, action) {
-    const row = rowData._rowElement;
-    if (!row) return false;
-
-    // Highlight
-    row.style.transition = "background 0.3s ease";
-    row.style.background = action === "approved" ? "#e8f5e9"
-      : action === "rejected" ? "#fdecea" : "#fff8e1";
-
-    // Try to find and click action button
-    const buttons = Array.from(row.querySelectorAll("button, [role='button']"));
-
-    if (action === "approved") {
-      const btn = buttons.find(b =>
-        b.textContent.toLowerCase().includes("approv") ||
-        b.className.toLowerCase().includes("approv") ||
-        b.className.toLowerCase().includes("success") ||
-        b.className.toLowerCase().includes("green")
-      );
-      if (btn) { btn.type = "button"; btn.click(); return true; }
-    }
-
-    if (action === "rejected") {
-      const btn = buttons.find(b =>
-        b.textContent.toLowerCase().includes("reject") ||
-        b.textContent.toLowerCase().includes("declin") ||
-        b.className.toLowerCase().includes("reject") ||
-        b.className.toLowerCase().includes("danger") ||
-        b.className.toLowerCase().includes("red")
-      );
-      if (btn) { btn.type = "button"; btn.click(); return true; }
-    }
-
-    if (action === "escalate") {
-      const btn = buttons.find(b =>
-        b.textContent.toLowerCase().includes("escalat") ||
-        b.textContent.toLowerCase().includes("flag") ||
-        b.textContent.toLowerCase().includes("review")
-      );
-      if (btn) { btn.type = "button"; btn.click(); return true; }
-    }
-
-    // Also update any badge/status element in the row
-    const badge = row.querySelector(".badge, [class*='status'], [class*='badge']");
-    if (badge) {
-      badge.className = badge.className.replace(/pending|approved|rejected|escalate/g, "") + " " + action;
-      badge.textContent = action.charAt(0).toUpperCase() + action.slice(1);
-    }
-
-    return true;
-  }
-
-  // ── Execute Actions on Page ────────────────────────────
-  async function executeOnPage(rows, action, command) {
-    const cmd = command.toLowerCase();
-
-    // Filter rows based on command
-    let targets = rows;
-
-    if (cmd.includes("under")) {
-      const match = cmd.match(/[\d,]+/);
-      const limit = match ? parseInt(match[0].replace(",", "")) : 999999;
-      targets = rows.filter(r => r.amount < limit);
-    } else if (cmd.includes("above") || cmd.includes("over")) {
-      const match = cmd.match(/[\d,]+/);
-      const limit = match ? parseInt(match[0].replace(",", "")) : 0;
-      targets = rows.filter(r => r.amount > limit);
-    } else if (cmd.includes("gold")) {
-      targets = rows.filter(r => r.plan === "Gold");
-    } else if (cmd.includes("bronze")) {
-      targets = rows.filter(r => r.plan === "Bronze");
-    } else if (cmd.includes("silver")) {
-      targets = rows.filter(r => r.plan === "Silver");
-    }
-
-    if (targets.length === 0) {
-      addMsg("agent", "🔎 No matching rows found on the dashboard for that instruction.");
-      return;
-    }
-
-    for (let i = 0; i < targets.length; i++) {
-      const target = targets[i];
-      const row = document.getElementById("row-" + target.id);
-
-      if (row) {
-        // Highlight row
-        row.style.transition = "background 0.4s ease";
-        row.style.background = action === "approved"
-          ? "#e8f5e9" : action === "rejected"
-          ? "#fdecea" : "#fff8e1";
-
-        // Update badge
-        if (typeof updateStatus === "function") {
-          updateStatus(target.id, action);
-        }
-      }
-
-      const icon = action === "approved" ? "✅" : action === "rejected" ? "❌" : "⚠️";
-      addMsg(`action-${action}`,
-        `${icon} <strong>${action.toUpperCase()}</strong> — ${target.id} · ${target.member} · ₦${target.amount.toLocaleString()}`
-      );
-
-      await sleep(600);
-    }
-  }
-
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  // ── DOM Scanner — Reads Any Page ──────────────────────
-function scanPage() {
-  const elements = [];
-  let idCounter = 0;
-
-  function generateId(el) {
-    if (!el.dataset.afId) {
-      el.dataset.afId = "af_el_" + idCounter++;
-    }
-    return el.dataset.afId;
-  }
-
-  // Scan buttons
-  document.querySelectorAll("button, [role='button'], input[type='button'], input[type='submit']").forEach(el => {
-    if (el.id === "af-launcher" || el.closest("#af-panel")) return;
-    elements.push({
-      afId: generateId(el),
-      type: "button",
-      text: (el.textContent || el.value || "").trim().substring(0, 80),
-      id: el.id || null,
-      classes: el.className || null,
-      disabled: el.disabled || false,
-      visible: el.offsetParent !== null
-    });
-  });
-
-  // Scan inputs
-  document.querySelectorAll("input:not([type='button']):not([type='submit']), textarea, select").forEach(el => {
-    if (el.id === "af-input" || el.closest("#af-panel")) return;
-    elements.push({
-      afId: generateId(el),
-      type: el.tagName === "SELECT" ? "select" : el.tagName === "TEXTAREA" ? "textarea" : "input",
-      inputType: el.type || "text",
-      placeholder: el.placeholder || null,
-      label: el.labels?.[0]?.textContent?.trim() || null,
-      id: el.id || null,
-      value: el.value || null,
-      options: el.tagName === "SELECT"
-        ? Array.from(el.options).map(o => o.text)
-        : null,
-      visible: el.offsetParent !== null
-    });
-  });
-
-  // Scan links
-  document.querySelectorAll("a[href]").forEach(el => {
-    if (el.closest("#af-panel")) return;
-    elements.push({
-      afId: generateId(el),
-      type: "link",
-      text: el.textContent.trim().substring(0, 80),
-      href: el.href || null,
-      id: el.id || null,
-      visible: el.offsetParent !== null
-    });
-  });
-
-  // Scan tables
-  document.querySelectorAll("table").forEach(table => {
-    if (table.closest("#af-panel")) return;
-    const headers = Array.from(table.querySelectorAll("th"))
-      .map(th => th.textContent.trim());
-    const rows = Array.from(table.querySelectorAll("tbody tr")).map(row => {
-      const cells = Array.from(row.querySelectorAll("td"))
-        .map(td => td.textContent.trim().substring(0, 50));
-      return {
-        afId: generateId(row),
-        id: row.id || null,
-        data: row.dataset || {},
-        cells,
-        status: row.querySelector(".badge")?.textContent?.trim() || null
-      };
-    });
-    elements.push({
-      afId: generateId(table),
-      type: "table",
-      id: table.id || null,
-      headers,
-      rowCount: rows.length,
-      rows: rows.slice(0, 30)
-    });
-  });
-
-  // Scan forms
-  document.querySelectorAll("form").forEach(form => {
-    if (form.closest("#af-panel")) return;
-    elements.push({
-      afId: generateId(form),
-      type: "form",
-      id: form.id || null,
-      action: form.action || null
-    });
-  });
-
-  // Page summary
-  const summary = {
-    title: document.title,
-    url: window.location.href,
-    pageText: document.body.innerText.substring(0, 500),
-    elementCount: elements.length,
-    elements
-  };
-
-  return summary;
-}
-
-// ── Action Executor — Performs AI Actions on Page ─────
-async function executeActions(actions) {
-  if (!actions || actions.length === 0) {
-    addMsg("agent", "🔎 No actions to execute on this page.");
-    return;
-  }
-
-  for (const action of actions) {
-    await sleep(600);
-
-    try {
-      // Find element by afId first, then fallback to id
-      let el = document.querySelector(`[data-af-id="${action.afId}"]`);
-      if (!el && action.elementId) {
-        el = document.getElementById(action.elementId);
-      }
-      if (!el && action.selector) {
-        el = document.querySelector(action.selector);
-      }
-
-      if (!el) {
-        addMsg("action-escalate", `⚠️ Could not find element for: <strong>${action.description}</strong>`);
-        continue;
-      }
-
-      // Highlight element before acting
-      const originalOutline = el.style.outline;
-      const originalBackground = el.style.background;
-      el.style.outline = "2px solid #0052cc";
-      el.style.background = "#e8f0fe";
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      await sleep(500);
-
-      // Perform the action
-      switch (action.type) {
-        case "click":
-          el.click();
-          addMsg("action-approve", `🖱️ <strong>CLICKED</strong> — ${action.description}`);
-          break;
-
-        case "fill":
-          el.focus();
-          el.value = action.value;
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-          addMsg("action-approve", `✏️ <strong>FILLED</strong> — ${action.description}: "${action.value}"`);
-          break;
-
-        case "select":
-          el.value = action.value;
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-          addMsg("action-approve", `📋 <strong>SELECTED</strong> — ${action.description}: "${action.value}"`);
-          break;
-
-        case "approve_row":
-          // Special handler for table rows with approve buttons
-          const approveBtn = el.querySelector(".btn-approve") ||
-            el.querySelector("[class*='approve']") ||
-            Array.from(el.querySelectorAll("button")).find(b =>
-              b.textContent.toLowerCase().includes("approve")
-            );
-          if (approveBtn) {
-            approveBtn.click();
-            addMsg("action-approve", `✅ <strong>APPROVED</strong> — ${action.description}`);
-          }
-          break;
-
-        case "reject_row":
-          const rejectBtn = el.querySelector(".btn-reject") ||
-            el.querySelector("[class*='reject']") ||
-            Array.from(el.querySelectorAll("button")).find(b =>
-              b.textContent.toLowerCase().includes("reject")
-            );
-          if (rejectBtn) {
-            rejectBtn.click();
-            addMsg("action-reject", `❌ <strong>REJECTED</strong> — ${action.description}`);
-          }
-          break;
-
-        case "navigate":
-          addMsg("action-approve", `🔗 <strong>NAVIGATING</strong> — ${action.description}`);
-          await sleep(400);
-          window.location.href = action.value;
-          break;
-
-        default:
-          addMsg("action-escalate", `⚠️ Unknown action type: ${action.type}`);
-      }
-
-      // Remove highlight
-      await sleep(300);
-      el.style.outline = originalOutline;
-      el.style.background = originalBackground;
-
-    } catch (err) {
-      addMsg("action-escalate", `⚠️ Error on: <strong>${action.description}</strong> — ${err.message}`);
-      console.error("Action execution error:", err);
-    }
-  }
-}
-
-  // ── Boot ───────────────────────────────────────────────
   init();
 
 })();
