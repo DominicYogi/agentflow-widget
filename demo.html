@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MediCare HMO — Pre-Authorization Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #f5f6fa;
+      --sidebar: #0f1623;
+      --sidebar-text: #8a9bb5;
+      --sidebar-active: #ffffff;
+      --primary: #2563eb;
+      --primary-light: #eff6ff;
+      --surface: #ffffff;
+      --border: #e8ecf2;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --green: #059669;
+      --green-bg: #ecfdf5;
+      --red: #dc2626;
+      --red-bg: #fef2f2;
+      --amber: #d97706;
+      --amber-bg: #fffbeb;
+      --blue: #2563eb;
+      --mono: 'IBM Plex Mono', monospace;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 240px; background: var(--sidebar); flex-shrink: 0;
+      display: flex; flex-direction: column; position: fixed;
+      top:0; left:0; bottom:0; z-index:50;
+    }
+    .sidebar-brand {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid #1e2a3a;
+    }
+    .brand-logo {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .brand-icon {
+      width: 36px; height: 36px; background: var(--primary);
+      border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; font-size: 18px;
+    }
+    .brand-name { font-size: 15px; font-weight: 700; color: white; letter-spacing: -.2px; }
+    .brand-sub  { font-size: 10px; color: var(--sidebar-text); margin-top: 1px; letter-spacing: .5px; text-transform: uppercase; }
+
+    .nav-section { padding: 20px 12px 8px; }
+    .nav-label { font-size: 10px; color: #4a5568; letter-spacing: 1px; text-transform: uppercase; padding: 0 8px; margin-bottom: 6px; font-weight: 600; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+      border-radius: 8px; color: var(--sidebar-text); font-size: 13px;
+      cursor: pointer; transition: all .18s; margin-bottom: 2px;
+      border: none; background: none; width: 100%; text-align: left;
+    }
+    .nav-item:hover { background: #1a2535; color: #c8d4e8; }
+    .nav-item.active { background: #1e3a5f; color: white; font-weight: 600; }
+    .nav-item .nav-icon { width: 18px; text-align: center; font-size: 14px; }
+    .nav-badge {
+      margin-left: auto; background: var(--primary); color: white;
+      font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px;
+    }
+    .nav-badge.amber { background: var(--amber); }
+
+    .sidebar-footer {
+      margin-top: auto; padding: 16px; border-top: 1px solid #1e2a3a;
+    }
+    .user-card {
+      display: flex; align-items: center; gap: 10px; padding: 10px;
+      border-radius: 8px; cursor: pointer;
+    }
+    .user-card:hover { background: #1a2535; }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: white; flex-shrink: 0;
+    }
+    .user-name  { font-size: 13px; color: #c8d4e8; font-weight: 600; }
+    .user-role  { font-size: 11px; color: #4a5568; }
+
+    /* ── Main ── */
+    .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ── Topbar ── */
+    .topbar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 28px; height: 58px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 40;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 16px; }
+    .page-title  { font-size: 16px; font-weight: 700; color: var(--text); }
+    .breadcrumb  { font-size: 12px; color: var(--text-muted); }
+
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .topbar-btn {
+      padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none; transition: all .18s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .btn-ghost { background: none; border: 1.5px solid var(--border); color: var(--text-muted); }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-primary-sm { background: var(--primary); color: white; }
+    .btn-primary-sm:hover { background: #1d4ed8; }
+
+    .notif-dot {
+      width: 8px; height: 8px; background: #ef4444;
+      border-radius: 50%; position: absolute; top: 6px; right: 6px;
+    }
+    .notif-wrap { position: relative; }
+
+    /* ── Page content ── */
+    .content { padding: 24px 28px; flex: 1; }
+
+    /* ── Stats row ── */
+    .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card {
+      background: var(--surface); border-radius: 12px; padding: 18px 20px;
+      border: 1px solid var(--border); position: relative; overflow: hidden;
+    }
+    .stat-card::after {
+      content:''; position:absolute; right:-10px; bottom:-10px;
+      width:60px; height:60px; border-radius:50%;
+      background: var(--primary-light); opacity:.5;
+    }
+    .stat-label  { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+    .stat-value  { font-size: 28px; font-weight: 800; color: var(--text); margin: 6px 0 4px; letter-spacing: -1px; }
+    .stat-change { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+    .stat-change.up   { color: var(--green); }
+    .stat-change.down { color: var(--red); }
+    .stat-change.neutral { color: var(--text-muted); }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .toolbar-left { display: flex; align-items: center; gap: 10px; }
+    .search-box {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; width: 240px;
+    }
+    .search-box input {
+      border: none; outline: none; font-size: 13px; font-family: inherit;
+      color: var(--text); background: none; width: 100%;
+    }
+    .search-box input::placeholder { color: #c0c6d0; }
+
+    .filter-btn {
+      display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: 13px; color: var(--text-muted);
+      cursor: pointer; font-family: inherit; transition: all .18s;
+    }
+    .filter-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .filter-btn.active { border-color: var(--primary); color: var(--primary); background: var(--primary-light); font-weight: 600; }
+
+    /* ── Table ── */
+    .table-card {
+      background: var(--surface); border-radius: 14px;
+      border: 1px solid var(--border); overflow: hidden;
+    }
+    .table-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .table-title { font-size: 14px; font-weight: 700; }
+    .table-count { font-size: 12px; color: var(--text-muted); background: var(--bg); padding: 3px 10px; border-radius: 20px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 11px 16px; text-align: left; font-size: 11px;
+      color: var(--text-muted); font-weight: 600; text-transform: uppercase;
+      letter-spacing: .5px; background: #fafbfd; border-bottom: 1px solid var(--border);
+    }
+    tbody tr { transition: background .15s; }
+    tbody tr:hover td { background: #f8faff; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody td {
+      padding: 14px 16px; border-bottom: 1px solid #f2f4f8;
+      font-size: 13px; color: var(--text);
+    }
+
+    .cell-primary { font-weight: 600; color: var(--text); }
+    .cell-sub     { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-family: var(--mono); }
+
+    /* ── Status badges ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 700; letter-spacing: .3px;
+    }
+    .badge::before { content:''; width:6px; height:6px; border-radius:50%; }
+    .badge.pending   { background:#f0f4ff; color:#4f46e5; }
+    .badge.pending::before   { background:#4f46e5; }
+    .badge.approved  { background:var(--green-bg); color:var(--green); }
+    .badge.approved::before  { background:var(--green); }
+    .badge.rejected  { background:var(--red-bg); color:var(--red); }
+    .badge.rejected::before  { background:var(--red); }
+    .badge.escalated { background:var(--amber-bg); color:var(--amber); }
+    .badge.escalated::before { background:var(--amber); }
+
+    /* ── Plan pills ── */
+    .plan-pill {
+      padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 700;
+      font-family: var(--mono);
+    }
+    .plan-gold     { background:#fef9c3; color:#92400e; }
+    .plan-silver   { background:#f1f5f9; color:#475569; }
+    .plan-bronze   { background:#fef3c7; color:#b45309; }
+    .plan-platinum { background:#f0fdf4; color:#065f46; }
+
+    /* ── Amount ── */
+    .amount { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+    .amount.high { color: var(--red); }
+    .amount.mid  { color: var(--amber); }
+    .amount.low  { color: var(--green); }
+
+    /* ── Action buttons ── */
+    .action-group { display: flex; gap: 6px; }
+    .act-btn {
+      padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 600;
+      cursor: pointer; border: none; transition: all .18s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .act-approve { background: var(--green-bg); color: var(--green); }
+    .act-approve:hover { background: var(--green); color: white; }
+    .act-reject  { background: var(--red-bg); color: var(--red); }
+    .act-reject:hover  { background: var(--red); color: white; }
+    .act-escalate { background: var(--amber-bg); color: var(--amber); }
+    .act-escalate:hover { background: var(--amber); color: white; }
+    .act-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+      background: #111827; color: white; padding: 11px 20px; border-radius: 10px;
+      font-size: 13px; font-weight: 500; z-index: 999; opacity: 0;
+      transition: opacity .3s; pointer-events: none; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 4px; background: var(--bg); border-radius: 10px; padding: 4px; margin-bottom: 20px; width: fit-content; }
+    .tab {
+      padding: 7px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none; background: none; color: var(--text-muted);
+      font-family: 'DM Sans', sans-serif; transition: all .18s;
+    }
+    .tab.active { background: white; color: var(--primary); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+
+    /* ── Section pages ── */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Claims detail panel ── */
+    .detail-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .info-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .info-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-muted); margin-bottom: 14px; font-weight: 600; }
+    .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+    .info-row:last-child { border-bottom: none; }
+    .info-key { color: var(--text-muted); }
+    .info-val { font-weight: 600; color: var(--text); font-family: var(--mono); font-size: 12px; }
+
+    /* ── Empty state ── */
+    .empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty h3 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
+    .empty p  { font-size: 13px; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+    /* ── Highlight animation for AI ── */
+    @keyframes af-highlight {
+      0%   { background: #dbeafe; }
+      100% { background: transparent; }
+    }
+    .ai-touched { animation: af-highlight 1.5s ease forwards; }
+  </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">
+      <div class="brand-icon">🏥</div>
+      <div>
+        <div class="brand-name">MediCare HMO</div>
+        <div class="brand-sub">Staff Portal v2.4</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Operations</div>
+    <button class="nav-item active" onclick="showSection('preauth',this)">
+      <span class="nav-icon">📋</span> Pre-Authorization
+      <span class="nav-badge" id="nav-pending-count">8</span>
+    </button>
+    <button class="nav-item" onclick="showSection('claims',this)">
+      <span class="nav-icon">💊</span> Claims
+    </button>
+    <button class="nav-item" onclick="showSection('members',this)">
+      <span class="nav-icon">👥</span> Members
+    </button>
+    <button class="nav-item" onclick="showSection('providers',this)">
+      <span class="nav-icon">🏨</span> Providers
+    </button>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Reports</div>
+    <button class="nav-item" onclick="showSection('analytics',this)">
+      <span class="nav-icon">📊</span> Analytics
+    </button>
+    <button class="nav-item" onclick="showSection('audit',this)">
+      <span class="nav-icon">🔍</span> Audit Log
+      <span class="nav-badge amber" id="nav-audit-count">3</span>
+    </button>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="user-avatar">AO</div>
+      <div>
+        <div class="user-name">Adaeze Okonkwo</div>
+        <div class="user-role">Senior Auth Officer</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="page-title" id="page-title">Pre-Authorization Queue</div>
+        <div class="breadcrumb" id="page-breadcrumb">Operations › Pre-Authorization</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="topbar-btn btn-ghost" onclick="resetAllData()">↺ Reset Demo</button>
+      <button class="topbar-btn btn-primary-sm" onclick="addRandomRequest()">+ New Request</button>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- ══ PRE-AUTH SECTION ══ -->
+    <div class="section active" id="section-preauth">
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Pending Review</div>
+          <div class="stat-value" id="stat-pending">0</div>
+          <div class="stat-change neutral">⏳ Awaiting action</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Approved Today</div>
+          <div class="stat-value" id="stat-approved">0</div>
+          <div class="stat-change up">↑ This session</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Rejected Today</div>
+          <div class="stat-value" id="stat-rejected">0</div>
+          <div class="stat-change down">Policy violations</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Value</div>
+          <div class="stat-value" id="stat-value">₦0</div>
+          <div class="stat-change neutral">Pending requests</div>
+        </div>
+      </div>
+
+      <!-- Filter tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="filterTable('all',this)">All Requests</button>
+        <button class="tab" onclick="filterTable('pending',this)">Pending</button>
+        <button class="tab" onclick="filterTable('approved',this)">Approved</button>
+        <button class="tab" onclick="filterTable('rejected',this)">Rejected</button>
+        <button class="tab" onclick="filterTable('escalated',this)">Escalated</button>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <div class="search-box">
+            <span style="color:#c0c6d0;">🔍</span>
+            <input type="text" placeholder="Search member, hospital, procedure..." id="search-input" oninput="renderTable()" />
+          </div>
+          <button class="filter-btn" id="filter-gold" onclick="toggleFilter('Gold',this)">🥇 Gold</button>
+          <button class="filter-btn" id="filter-silver" onclick="toggleFilter('Silver',this)">🥈 Silver</button>
+          <button class="filter-btn" id="filter-bronze" onclick="toggleFilter('Bronze',this)">🥉 Bronze</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Authorization Requests</div>
+          <span class="table-count" id="table-count-label">Loading...</span>
+        </div>
+        <table id="preauth-table">
+          <thead>
+            <tr>
+              <th>Request ID</th>
+              <th>Member</th>
+              <th>Hospital / Provider</th>
+              <th>Procedure</th>
+              <th>Plan</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="preauth-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ CLAIMS SECTION ══ -->
+    <div class="section" id="section-claims">
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">Open Claims</div><div class="stat-value">14</div><div class="stat-change neutral">Awaiting payment</div></div>
+        <div class="stat-card"><div class="stat-label">Processed</div><div class="stat-value">237</div><div class="stat-change up">↑ This month</div></div>
+        <div class="stat-card"><div class="stat-label">Disputed</div><div class="stat-value">3</div><div class="stat-change down">Needs review</div></div>
+        <div class="stat-card"><div class="stat-label">Paid Out</div><div class="stat-value">₦18.4M</div><div class="stat-change up">↑ March 2026</div></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><div class="table-title">Recent Claims</div></div>
+        <table>
+          <thead><tr><th>Claim ID</th><th>Member</th><th>Provider</th><th>Diagnosis</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td><span class="cell-sub">CLM-2026-0341</span></td><td>Olumide Adeyemi</td><td>Lagos Island General</td><td>Hypertension follow-up</td><td class="amount low">₦28,500</td><td><span class="badge approved">Approved</span></td></tr>
+            <tr><td><span class="cell-sub">CLM-2026-0340</span></td><td>Chioma Nwosu</td><td>Reddington Hospital</td><td>Appendectomy (post-op)</td><td class="amount high">₦340,000</td><td><span class="badge pending">Pending</span></td></tr>
+            <tr><td><span class="cell-sub">CLM-2026-0339</span></td><td>Emeka Obi</td><td>LUTH</td><td>Dialysis — 3 sessions</td><td class="amount mid">₦120,000</td><td><span class="badge approved">Approved</span></td></tr>
+            <tr><td><span class="cell-sub">CLM-2026-0338</span></td><td>Fatima Bello</td><td>St. Nicholas</td><td>C-section delivery</td><td class="amount high">₦285,000</td><td><span class="badge escalated">Escalated</span></td></tr>
+            <tr><td><span class="cell-sub">CLM-2026-0337</span></td><td>Akin Fashola</td><td>Eko Hospital</td><td>MRI scan — spine</td><td class="amount mid">₦95,000</td><td><span class="badge rejected">Rejected</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ MEMBERS SECTION ══ -->
+    <div class="section" id="section-members">
+      <div class="table-card">
+        <div class="table-header"><div class="table-title">Enrolled Members</div><button class="topbar-btn btn-primary-sm" style="font-size:12px;padding:6px 12px;">+ Enroll Member</button></div>
+        <table>
+          <thead><tr><th>Member ID</th><th>Full Name</th><th>Plan</th><th>Company</th><th>Phone</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td class="cell-sub">MCR-10441</td><td><strong>Chukwuemeka Obi</strong></td><td><span class="plan-pill plan-gold">Gold</span></td><td>Dangote Industries</td><td style="font-family:var(--mono);font-size:12px;">+234 803 441 2210</td><td><span class="badge approved">Active</span></td></tr>
+            <tr><td class="cell-sub">MCR-10442</td><td><strong>Fatima Aliyu</strong></td><td><span class="plan-pill plan-silver">Silver</span></td><td>Zenith Bank</td><td style="font-family:var(--mono);font-size:12px;">+234 706 882 3310</td><td><span class="badge approved">Active</span></td></tr>
+            <tr><td class="cell-sub">MCR-10443</td><td><strong>Tunde Fashola</strong></td><td><span class="plan-pill plan-gold">Gold</span></td><td>MTN Nigeria</td><td style="font-family:var(--mono);font-size:12px;">+234 802 113 9900</td><td><span class="badge approved">Active</span></td></tr>
+            <tr><td class="cell-sub">MCR-10444</td><td><strong>Ngozi Adeyemi</strong></td><td><span class="plan-pill plan-bronze">Bronze</span></td><td>FCMB</td><td style="font-family:var(--mono);font-size:12px;">+234 907 774 2201</td><td><span class="badge pending">Pending</span></td></tr>
+            <tr><td class="cell-sub">MCR-10445</td><td><strong>Biodun Sawyer</strong></td><td><span class="plan-pill plan-platinum">Platinum</span></td><td>Access Bank</td><td style="font-family:var(--mono);font-size:12px;">+234 811 009 4412</td><td><span class="badge approved">Active</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ PROVIDERS SECTION ══ -->
+    <div class="section" id="section-providers">
+      <div class="table-card">
+        <div class="table-header"><div class="table-title">Network Providers</div></div>
+        <table>
+          <thead><tr><th>Hospital</th><th>Location</th><th>Tier</th><th>Specialties</th><th>Claims This Month</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Lagos Island General</strong></td><td>Lagos Island, Lagos</td><td><span class="badge approved">Tier 1</span></td><td>General, Surgery, ICU</td><td>47</td></tr>
+            <tr><td><strong>Reddington Hospital</strong></td><td>Victoria Island, Lagos</td><td><span class="badge approved">Tier 1</span></td><td>Cardiology, Oncology, Pediatrics</td><td>83</td></tr>
+            <tr><td><strong>St. Nicholas Hospital</strong></td><td>Lagos Island, Lagos</td><td><span class="badge approved">Tier 1</span></td><td>Orthopedics, Surgery, Radiology</td><td>29</td></tr>
+            <tr><td><strong>Eko Hospital</strong></td><td>Surulere, Lagos</td><td><span class="badge pending">Tier 2</span></td><td>General Practice, Dental</td><td>61</td></tr>
+            <tr><td><strong>LUTH</strong></td><td>Surulere, Lagos</td><td><span class="badge approved">Tier 1</span></td><td>Teaching, Research, All specialties</td><td>112</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ ANALYTICS SECTION ══ -->
+    <div class="section" id="section-analytics">
+      <div class="detail-row">
+        <div class="info-card"><h4>Approval Rate</h4>
+          <div class="info-row"><span class="info-key">Approved</span><span class="info-val" id="anal-approved">0</span></div>
+          <div class="info-row"><span class="info-key">Rejected</span><span class="info-val" id="anal-rejected">0</span></div>
+          <div class="info-row"><span class="info-key">Escalated</span><span class="info-val" id="anal-escalated">0</span></div>
+          <div class="info-row"><span class="info-key">Pending</span><span class="info-val" id="anal-pending">0</span></div>
+        </div>
+        <div class="info-card"><h4>Financial Summary</h4>
+          <div class="info-row"><span class="info-key">Pending Value</span><span class="info-val" id="anal-pending-val">₦0</span></div>
+          <div class="info-row"><span class="info-key">Approved Value</span><span class="info-val" id="anal-approved-val">₦0</span></div>
+          <div class="info-row"><span class="info-key">Rejected Value</span><span class="info-val" id="anal-rejected-val">₦0</span></div>
+          <div class="info-row"><span class="info-key">Avg Request</span><span class="info-val" id="anal-avg">₦0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ AUDIT SECTION ══ -->
+    <div class="section" id="section-audit">
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Audit Log</div>
+          <button class="topbar-btn btn-ghost" style="font-size:12px;padding:6px 12px;" onclick="clearAudit()">Clear Log</button>
+        </div>
+        <table>
+          <thead><tr><th>Time</th><th>Action</th><th>Request ID</th><th>Member</th><th>Officer</th></tr></thead>
+          <tbody id="audit-body"><tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><p>No actions recorded yet.</p></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- AgentFlow Widget -->
+<script
+  src="https://dominicyogi.github.io/agentflow-widget/widget.js"
+  data-api-key="af_live_medicare001"
+  data-theme="blue">
+</script>
+
+<script>
+  // ── Default data ──────────────────────────────────────
+  const DEFAULT_REQUESTS = [
+    { id:"PA-001", member:"Chukwuemeka Obi",  memberId:"MCR-10441", hospital:"Lagos Island General", procedure:"Appendectomy",        plan:"Gold",     amount:185000, status:"pending",   date:"2026-03-09" },
+    { id:"PA-002", member:"Fatima Aliyu",     memberId:"MCR-10442", hospital:"Reddington Hospital",  procedure:"MRI Scan – Brain",   plan:"Silver",   amount:95000,  status:"pending",   date:"2026-03-09" },
+    { id:"PA-003", member:"Tunde Fashola",    memberId:"MCR-10443", hospital:"St. Nicholas Hospital",procedure:"Knee Arthroscopy",   plan:"Gold",     amount:320000, status:"pending",   date:"2026-03-09" },
+    { id:"PA-004", member:"Ngozi Adeyemi",    memberId:"MCR-10444", hospital:"Eko Hospital",         procedure:"Ultrasound Scan",    plan:"Bronze",   amount:35000,  status:"pending",   date:"2026-03-09" },
+    { id:"PA-005", member:"Biodun Sawyer",    memberId:"MCR-10445", hospital:"Lagos Island General", procedure:"Dialysis Session",   plan:"Platinum", amount:120000, status:"pending",   date:"2026-03-09" },
+    { id:"PA-006", member:"Amaka Eze",        memberId:"MCR-10446", hospital:"Reddington Hospital",  procedure:"Chemotherapy Cycle", plan:"Gold",     amount:450000, status:"pending",   date:"2026-03-08" },
+    { id:"PA-007", member:"Emeka Nwosu",      memberId:"MCR-10447", hospital:"LUTH",                 procedure:"Cataract Surgery",   plan:"Silver",   amount:140000, status:"pending",   date:"2026-03-08" },
+    { id:"PA-008", member:"Halima Musa",      memberId:"MCR-10448", hospital:"Eko Hospital",         procedure:"Blood Panel Test",   plan:"Bronze",   amount:28000,  status:"pending",   date:"2026-03-08" },
+  ];
+
+  const RANDOM_MEMBERS = [
+    {name:"Seun Adeleke",id:"MCR-10449",plan:"Silver"},{name:"Kemi Olatunji",id:"MCR-10450",plan:"Gold"},
+    {name:"Bola Tinubu",id:"MCR-10451",plan:"Bronze"},{name:"Yemi Alade",id:"MCR-10452",plan:"Platinum"},
+    {name:"Ade Banwo",id:"MCR-10453",plan:"Silver"},{name:"Sola Peters",id:"MCR-10454",plan:"Gold"},
+  ];
+  const RANDOM_PROCEDURES = ["Physiotherapy (5 sessions)","Chest X-Ray","ECG Test","Hernia Repair","Eye Examination","Dental Extraction","CT Scan – Abdomen","Blood Transfusion","Laparoscopy","Colonoscopy"];
+  const RANDOM_HOSPITALS  = ["Lagos Island General","Reddington Hospital","St. Nicholas Hospital","Eko Hospital","LUTH","Lagoon Hospital","First Cardiology Clinic"];
+  const RANDOM_AMOUNTS    = [22000,45000,68000,95000,130000,175000,210000,280000,360000,480000];
+
+  // ── State ─────────────────────────────────────────────
+  let requests    = [];
+  let auditLog    = [];
+  let activeFilter = "all";
+  let activePlans  = new Set();
+
+  const LS_KEY_REQUESTS = "af_demo_requests";
+  const LS_KEY_AUDIT    = "af_demo_audit";
+
+  // ── LocalStorage ──────────────────────────────────────
+  function loadData() {
+    try {
+      const r = localStorage.getItem(LS_KEY_REQUESTS);
+      const a = localStorage.getItem(LS_KEY_AUDIT);
+      requests = r ? JSON.parse(r) : JSON.parse(JSON.stringify(DEFAULT_REQUESTS));
+      auditLog = a ? JSON.parse(a) : [];
+    } catch {
+      requests = JSON.parse(JSON.stringify(DEFAULT_REQUESTS));
+      auditLog = [];
+    }
+  }
+
+  function saveData() {
+    localStorage.setItem(LS_KEY_REQUESTS, JSON.stringify(requests));
+    localStorage.setItem(LS_KEY_AUDIT,    JSON.stringify(auditLog));
+  }
+
+  function resetAllData() {
+    if (!confirm("Reset demo to original data?")) return;
+    requests = JSON.parse(JSON.stringify(DEFAULT_REQUESTS));
+    auditLog = [];
+    saveData();
+    renderAll();
+    toast("Demo reset to original data");
+  }
+
+  // ── Actions ───────────────────────────────────────────
+  function updateStatus(requestId, newStatus) {
+    const req = requests.find(r => r.id === requestId);
+    if (!req || req.status !== "pending") return;
+    req.status = newStatus;
+
+    // Log it
+    auditLog.unshift({
+      time: new Date().toLocaleTimeString("en-NG", {hour:"2-digit",minute:"2-digit"}),
+      action: newStatus.charAt(0).toUpperCase() + newStatus.slice(1),
+      requestId: req.id,
+      member: req.member,
+      officer: "Adaeze Okonkwo"
+    });
+
+    saveData();
+    renderAll();
+    highlightRow(requestId);
+
+    const icons = { approved:"✅", rejected:"❌", escalated:"⚠️" };
+    toast(`${icons[newStatus]||""} ${req.member} — ${newStatus}`);
+  }
+
+  function highlightRow(id) {
+    const row = document.getElementById("row-" + id);
+    if (row) {
+      row.classList.remove("ai-touched");
+      void row.offsetWidth;
+      row.classList.add("ai-touched");
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────
+  function renderAll() {
+    renderTable();
+    renderStats();
+    renderAudit();
+    renderAnalytics();
+    updateNavBadges();
+  }
+
+  function renderStats() {
+    const pending  = requests.filter(r => r.status === "pending");
+    const approved = requests.filter(r => r.status === "approved");
+    const rejected = requests.filter(r => r.status === "rejected");
+    const totalVal = pending.reduce((s,r) => s + r.amount, 0);
+
+    document.getElementById("stat-pending").textContent  = pending.length;
+    document.getElementById("stat-approved").textContent = approved.length;
+    document.getElementById("stat-rejected").textContent = rejected.length;
+    document.getElementById("stat-value").textContent    = formatAmount(totalVal);
+  }
+
+  function renderTable() {
+    const search  = document.getElementById("search-input").value.toLowerCase();
+    let filtered  = requests.filter(r => {
+      if (activeFilter !== "all" && r.status !== activeFilter) return false;
+      if (activePlans.size > 0 && !activePlans.has(r.plan)) return false;
+      if (search && !`${r.member} ${r.hospital} ${r.procedure} ${r.id}`.toLowerCase().includes(search)) return false;
+      return true;
+    });
+
+    document.getElementById("table-count-label").textContent = `${filtered.length} request${filtered.length !== 1 ? "s" : ""}`;
+
+    if (filtered.length === 0) {
+      document.getElementById("preauth-body").innerHTML = `
+        <tr><td colspan="8"><div class="empty">
+          <div class="empty-icon">📭</div>
+          <h3>No requests found</h3>
+          <p>Try adjusting your filters</p>
+        </div></td></tr>`;
+      return;
+    }
+
+    document.getElementById("preauth-body").innerHTML = filtered.map(r => {
+      const isPending = r.status === "pending";
+      const amtClass  = r.amount > 200000 ? "high" : r.amount > 80000 ? "mid" : "low";
+      const planClass = r.plan.toLowerCase();
+      return `
+        <tr id="row-${r.id}">
+          <td>
+            <div class="cell-primary" style="font-family:var(--mono);font-size:12px;">${r.id}</div>
+            <div class="cell-sub">${r.date}</div>
+          </td>
+          <td>
+            <div class="cell-primary">${r.member}</div>
+            <div class="cell-sub">${r.memberId}</div>
+          </td>
+          <td>${r.hospital}</td>
+          <td>${r.procedure}</td>
+          <td><span class="plan-pill plan-${planClass}">${r.plan}</span></td>
+          <td><span class="amount ${amtClass}">${formatAmount(r.amount)}</span></td>
+          <td><span class="badge ${r.status}">${r.status}</span></td>
+          <td>
+            <div class="action-group">
+              <button class="act-btn act-approve" ${!isPending?"disabled":""} onclick="updateStatus('${r.id}','approved')">✓ Approve</button>
+              <button class="act-btn act-reject"  ${!isPending?"disabled":""} onclick="updateStatus('${r.id}','rejected')">✕ Reject</button>
+              <button class="act-btn act-escalate" ${!isPending?"disabled":""} onclick="updateStatus('${r.id}','escalated')">↑ Escalate</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join("");
+  }
+
+  function renderAudit() {
+    const tbody = document.getElementById("audit-body");
+    if (auditLog.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><p>No actions recorded yet.</p></div></td></tr>`;
+      return;
+    }
+    const icons = { Approved:"✅", Rejected:"❌", Escalated:"⚠️" };
+    tbody.innerHTML = auditLog.slice(0,50).map(a => `
+      <tr>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--text-muted);">${a.time}</td>
+        <td>${icons[a.action]||""} <strong>${a.action}</strong></td>
+        <td style="font-family:var(--mono);font-size:12px;">${a.requestId}</td>
+        <td>${a.member}</td>
+        <td>${a.officer}</td>
+      </tr>`).join("");
+    document.getElementById("nav-audit-count").textContent = auditLog.length;
+  }
+
+  function renderAnalytics() {
+    const groups = { approved:0, rejected:0, escalated:0, pending:0 };
+    const values = { approved:0, rejected:0, pending:0 };
+    requests.forEach(r => {
+      groups[r.status]++;
+      if (r.status === "approved") values.approved += r.amount;
+      if (r.status === "rejected") values.rejected += r.amount;
+      if (r.status === "pending")  values.pending  += r.amount;
+    });
+    const avg = requests.length ? Math.round(requests.reduce((s,r) => s+r.amount,0) / requests.length) : 0;
+    document.getElementById("anal-approved").textContent  = groups.approved;
+    document.getElementById("anal-rejected").textContent  = groups.rejected;
+    document.getElementById("anal-escalated").textContent = groups.escalated;
+    document.getElementById("anal-pending").textContent   = groups.pending;
+    document.getElementById("anal-pending-val").textContent  = formatAmount(values.pending);
+    document.getElementById("anal-approved-val").textContent = formatAmount(values.approved);
+    document.getElementById("anal-rejected-val").textContent = formatAmount(values.rejected);
+    document.getElementById("anal-avg").textContent          = formatAmount(avg);
+  }
+
+  function updateNavBadges() {
+    const n = requests.filter(r => r.status === "pending").length;
+    document.getElementById("nav-pending-count").textContent = n;
+  }
+
+  // ── Filters ───────────────────────────────────────────
+  function filterTable(status, el) {
+    activeFilter = status;
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    el.classList.add("active");
+    renderTable();
+  }
+
+  function toggleFilter(plan, el) {
+    if (activePlans.has(plan)) { activePlans.delete(plan); el.classList.remove("active"); }
+    else                       { activePlans.add(plan);    el.classList.add("active");    }
+    renderTable();
+  }
+
+  // ── Add random request ────────────────────────────────
+  function addRandomRequest() {
+    const m   = RANDOM_MEMBERS[Math.floor(Math.random()*RANDOM_MEMBERS.length)];
+    const num = requests.length + 1;
+    requests.push({
+      id: `PA-${String(num).padStart(3,"0")}`,
+      member: m.name, memberId: m.id,
+      hospital:  RANDOM_HOSPITALS[Math.floor(Math.random()*RANDOM_HOSPITALS.length)],
+      procedure: RANDOM_PROCEDURES[Math.floor(Math.random()*RANDOM_PROCEDURES.length)],
+      plan:   m.plan,
+      amount: RANDOM_AMOUNTS[Math.floor(Math.random()*RANDOM_AMOUNTS.length)],
+      status: "pending",
+      date:   new Date().toISOString().split("T")[0]
+    });
+    saveData();
+    renderAll();
+    toast("New request added");
+  }
+
+  // ── Section switching ─────────────────────────────────
+  const PAGE_TITLES = {
+    preauth:   ["Pre-Authorization Queue",   "Operations › Pre-Authorization"],
+    claims:    ["Claims Management",          "Operations › Claims"],
+    members:   ["Member Directory",           "Operations › Members"],
+    providers: ["Provider Network",           "Operations › Providers"],
+    analytics: ["Analytics Overview",         "Reports › Analytics"],
+    audit:     ["Audit Log",                  "Reports › Audit Log"],
+  };
+
+  function showSection(name, el) {
+    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+    document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+    document.getElementById("section-"+name).classList.add("active");
+    if (el) el.classList.add("active");
+    const titles = PAGE_TITLES[name] || [name, name];
+    document.getElementById("page-title").textContent      = titles[0];
+    document.getElementById("page-breadcrumb").textContent = titles[1];
+    if (name === "analytics") renderAnalytics();
+    if (name === "audit")     renderAudit();
+  }
+
+  function clearAudit() {
+    if (!confirm("Clear audit log?")) return;
+    auditLog = [];
+    saveData();
+    renderAudit();
+  }
+
+  // ── Utilities ─────────────────────────────────────────
+  function formatAmount(n) {
+    if (n >= 1000000) return "₦" + (n/1000000).toFixed(1) + "M";
+    if (n >= 1000)    return "₦" + (n/1000).toFixed(0)    + "k";
+    return "₦" + n.toLocaleString();
+  }
+
+  function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 2500);
+  }
+
+  // ── Boot ──────────────────────────────────────────────
+  loadData();
+  renderAll();
+</script>
+</body>
+</html>
