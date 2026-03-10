@@ -30,7 +30,6 @@
       line-height: 1.6;
     }
 
-    /* ── Noise texture overlay ── */
     body::before {
       content: '';
       position: fixed;
@@ -40,9 +39,7 @@
       z-index: 0;
     }
 
-    /* ════════════════════════════════
-       LOGIN SCREEN
-    ════════════════════════════════ */
+    /* ════════ LOGIN ════════ */
     #login-screen {
       position: fixed;
       inset: 0;
@@ -176,16 +173,13 @@
       display: none;
     }
 
-    /* ════════════════════════════════
-       DASHBOARD
-    ════════════════════════════════ */
+    /* ════════ DASHBOARD ════════ */
     #dashboard {
       display: none;
       min-height: 100vh;
       position: relative;
     }
 
-    /* Ambient glow */
     #dashboard::before {
       content: '';
       position: fixed;
@@ -195,7 +189,6 @@
       pointer-events: none;
     }
 
-    /* ── Topbar ── */
     .topbar {
       position: sticky;
       top: 0;
@@ -270,7 +263,6 @@
     }
     .logout-btn:hover { border-color: var(--danger); color: var(--danger); }
 
-    /* ── Main content ── */
     .main {
       max-width: 1100px;
       margin: 0 auto;
@@ -296,7 +288,6 @@
       font-size: 14px;
     }
 
-    /* ── Stats grid ── */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -356,7 +347,6 @@
       color: var(--muted);
     }
 
-    /* ── Usage bar ── */
     .usage-section {
       background: var(--card);
       border: 1px solid var(--border);
@@ -387,9 +377,7 @@
       letter-spacing: 0.05em;
     }
 
-    .usage-bar-wrap {
-      margin-bottom: 12px;
-    }
+    .usage-bar-wrap { margin-bottom: 12px; }
 
     .usage-bar-labels {
       display: flex;
@@ -451,7 +439,6 @@
     .plan-pill .pill-label { color: var(--muted); }
     .plan-pill .pill-val { font-weight: 600; margin-left: 4px; }
 
-    /* ── Embed code ── */
     .embed-section {
       background: var(--card);
       border: 1px solid var(--border);
@@ -504,7 +491,6 @@
     .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
     .copy-btn.copied { border-color: var(--accent); color: var(--accent); }
 
-    /* ── Quick actions ── */
     .quick-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -524,15 +510,9 @@
       display: block;
     }
 
-    .quick-card:hover {
-      border-color: var(--accent);
-      transform: translateY(-2px);
-    }
+    .quick-card:hover { border-color: var(--accent); transform: translateY(-2px); }
 
-    .quick-icon {
-      font-size: 24px;
-      margin-bottom: 10px;
-    }
+    .quick-icon { font-size: 24px; margin-bottom: 10px; }
 
     .quick-title {
       font-family: 'Syne', sans-serif;
@@ -541,13 +521,8 @@
       margin-bottom: 4px;
     }
 
-    .quick-desc {
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.5;
-    }
+    .quick-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
 
-    /* ── Responsive ── */
     @media (max-width: 768px) {
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
       .quick-grid { grid-template-columns: repeat(2, 1fr); }
@@ -561,7 +536,7 @@
       .login-card { padding: 32px 24px; }
     }
 
-    /* ── Audit Log ── */
+    /* ════════ AUDIT LOG ════════ */
     .audit-section {
       background: var(--card);
       border: 1px solid var(--border);
@@ -635,10 +610,7 @@
     .audit-tag.rejected { background: rgba(255,92,122,0.12); color: var(--danger); }
     .audit-tag.escalate { background: rgba(255,181,71,0.12); color: var(--warning); }
 
-    .audit-time {
-      font-size: 12px;
-      color: var(--muted);
-    }
+    .audit-time { font-size: 12px; color: var(--muted); }
 
     .audit-page {
       font-size: 12px;
@@ -649,21 +621,8 @@
       max-width: 200px;
     }
 
-    .audit-items {
-      margin-top: 6px;
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.6;
-    }
+    .audit-items { margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.6; }
 
-    .audit-empty {
-      text-align: center;
-      padding: 48px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    /* ── Expandable audit entries ── */
     .audit-entry-wrap {
       border-bottom: 1px solid var(--border);
       animation: fadeUp 0.3s ease both;
@@ -684,9 +643,7 @@
       flex-shrink: 0; margin-left: auto; padding-left: 12px;
       transition: transform 0.2s, color 0.2s;
     }
-    .audit-entry-wrap.expanded .audit-expand-arrow {
-      transform: rotate(90deg); color: var(--accent);
-    }
+    .audit-entry-wrap.expanded .audit-expand-arrow { transform: rotate(90deg); color: var(--accent); }
     .audit-entry-wrap.expanded .audit-command { white-space: normal; }
 
     .audit-detail {
@@ -700,16 +657,9 @@
     .ad-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; }
     .ad-grid-2 { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border); }
 
-    .ad-section {
-      padding: 18px 20px;
-      border-right: 1px solid var(--border);
-    }
+    .ad-section { padding: 18px 20px; border-right: 1px solid var(--border); }
     .ad-section:last-child { border-right: none; }
-    .ad-section-full {
-      border-top: 1px solid var(--border);
-      border-right: none !important;
-      padding: 18px 20px;
-    }
+    .ad-section-full { border-top: 1px solid var(--border); border-right: none !important; padding: 18px 20px; }
 
     .ad-title {
       font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
@@ -765,6 +715,8 @@
     .ad-full-link a { font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 600; }
     .ad-full-link a:hover { text-decoration: underline; }
 
+    .audit-empty { text-align: center; padding: 48px; color: var(--muted); font-size: 14px; }
+
     @media (max-width: 800px) {
       .ad-grid-3, .ad-grid-2 { grid-template-columns: 1fr; }
       .ad-section { border-right: none; border-bottom: 1px solid var(--border); }
@@ -773,9 +725,7 @@
 </head>
 <body>
 
-<!-- ══════════════════════════════════
-     LOGIN SCREEN
-══════════════════════════════════ -->
+<!-- LOGIN -->
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">
@@ -786,36 +736,16 @@
     <p class="login-sub">Sign in with your email and password</p>
 
     <label class="field-label" for="email-input">Email Address</label>
-    <input
-      class="field-input"
-      id="email-input"
-      type="email"
-      placeholder="you@company.com"
-      autocomplete="email"
-      style="margin-bottom:16px;"
-    />
+    <input class="field-input" id="email-input" type="email" placeholder="you@company.com" autocomplete="email" style="margin-bottom:16px;" />
     <label class="field-label" for="password-input">Password</label>
-    <input
-      class="field-input"
-      id="password-input"
-      type="password"
-      placeholder="Your dashboard password"
-      autocomplete="current-password"
-    />
+    <input class="field-input" id="password-input" type="password" placeholder="Your dashboard password" autocomplete="current-password" />
 
-    <button class="login-btn" id="login-btn" onclick="doLogin()">
-      Sign in →
-    </button>
-
-    <div class="login-error" id="login-error">
-      Invalid API key. Please check and try again.
-    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in →</button>
+    <div class="login-error" id="login-error">Invalid email or password.</div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════
-     DASHBOARD
-══════════════════════════════════ -->
+<!-- DASHBOARD -->
 <div id="dashboard">
 
   <nav class="topbar">
@@ -828,6 +758,7 @@
         <div class="status-dot"></div>
         <span id="topbar-client-name">Loading...</span>
       </div>
+      <!-- FIX 1: was calling doLogout() but function was named logout() -->
       <button class="logout-btn" onclick="doLogout()">Sign out</button>
     </div>
   </nav>
@@ -839,7 +770,6 @@
       <p id="header-plan-info">Loading your subscription details...</p>
     </div>
 
-    <!-- Stats -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">Tasks Used</div>
@@ -863,7 +793,6 @@
       </div>
     </div>
 
-    <!-- Usage -->
     <div class="usage-section">
       <div class="section-title">
         Usage This Period
@@ -878,24 +807,18 @@
           <div class="usage-bar-fill" id="usage-bar-fill" style="width: 0%"></div>
         </div>
       </div>
-      <div class="plan-pills" id="plan-pills">
-        <!-- filled by JS -->
-      </div>
+      <div class="plan-pills" id="plan-pills"></div>
     </div>
 
-    <!-- Embed Code -->
     <div class="embed-section">
       <div class="section-title">Your Embed Code</div>
       <p class="embed-description">
-        Copy this script tag and paste it before the closing <code style="color:var(--accent)">&lt;/body&gt;</code> tag on any web page. The AgentFlow widget will appear instantly.
+        Copy this script tag and paste it before the closing <code style="color:var(--accent)">&lt;/body&gt;</code> tag on any web page.
       </p>
       <div class="code-block" id="embed-code-block">Loading...</div>
-      <button class="copy-btn" id="copy-btn" onclick="copyEmbed()">
-        📋 Copy embed code
-      </button>
+      <button class="copy-btn" id="copy-btn" onclick="copyEmbed()">📋 Copy embed code</button>
     </div>
 
-    <!-- Quick actions -->
     <div class="quick-grid">
       <div class="quick-card" onclick="window.open('https://dominicyogi.github.io/agentflow-widget/', '_blank')">
         <div class="quick-icon">🚀</div>
@@ -914,7 +837,6 @@
       </div>
     </div>
 
-    <!-- Audit Log -->
     <div class="audit-section" id="audit-section">
       <div class="section-title">
         Audit Log
@@ -922,7 +844,6 @@
         <button class="refresh-btn" onclick="loadAuditLog()">↻ Refresh</button>
       </div>
       <p class="embed-description">Every action your AI agent has executed — who triggered it, what it did, and when.</p>
-
       <div id="audit-log-list">
         <div class="audit-empty">Loading audit log...</div>
       </div>
@@ -932,12 +853,11 @@
 </div>
 
 <script>
-  // ── Config ──────────────────────────────────────────────
   const BACKEND_URL = "https://agentflow-backend-krdb.onrender.com";
   let currentApiKey = "";
   let clientData = null;
 
-  // ── Login ───────────────────────────────────────────────
+  // ── Login ─────────────────────────────────────────────
   document.getElementById("password-input").addEventListener("keydown", e => {
     if (e.key === "Enter") doLogin();
   });
@@ -946,11 +866,12 @@
     const email    = (document.getElementById("email-input").value || "").trim();
     const password = (document.getElementById("password-input").value || "").trim();
     if (!email || !password) return;
+
     const btn = document.getElementById("login-btn");
-    const err = document.getElementById("login-error");
+    const errEl = document.getElementById("login-error");
     btn.disabled = true;
     btn.textContent = "Signing in...";
-    err.style.display = "none";
+    errEl.style.display = "none";
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/client/login`, {
@@ -965,64 +886,111 @@
       currentApiKey = data.client.apiKey;
       clientData    = data.client;
       sessionStorage.setItem("af_client_session", JSON.stringify(data.client));
-      renderDashboard(data.client);
 
-    } catch (err2) {
-      err.textContent   = err2.message || "Invalid email or password.";
-      err.style.display = "block";
+      // FIX 2: Re-fetch fresh stats from /api/agent/status after login
+      // so usage numbers are always up-to-date (not stale from login payload)
+      await refreshClientStats(data.client);
+
+    } catch (err) {
+      errEl.textContent   = err.message || "Invalid email or password.";
+      errEl.style.display = "block";
       btn.disabled = false;
       btn.textContent = "Sign in →";
     }
   }
 
-  // ── Render Dashboard ────────────────────────────────────
+  // FIX 3: Added refreshClientStats() — fetches live data from /status endpoint
+  // so tasksUsed, tasksRemaining, and tasksLimit are always current
+  async function refreshClientStats(baseClient) {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
+        headers: {
+          "x-api-key": currentApiKey,
+          "ngrok-skip-browser-warning": "true"
+        }
+      });
+      const data = await res.json();
+      if (data.success && data.client) {
+        // Merge fresh stats into the base client object
+        const merged = {
+          ...baseClient,
+          tasksUsed:      data.client.tasksUsed,
+          tasksLimit:     data.client.tasksLimit,
+          tasksRemaining: data.client.tasksRemaining,
+          status:         data.client.status,
+          plan:           data.client.plan,
+          industry:       data.client.industry,
+          name:           data.client.name
+        };
+        clientData = merged;
+        sessionStorage.setItem("af_client_session", JSON.stringify(merged));
+        renderDashboard(merged);
+        return;
+      }
+    } catch (e) {
+      // If status fetch fails, fall back to login data
+      console.warn("Could not refresh stats:", e.message);
+    }
+    // Fallback: render with whatever we have from login
+    renderDashboard(baseClient);
+  }
+
+  // ── Render Dashboard ──────────────────────────────────
   function renderDashboard(client) {
-    // Hide login, show dashboard
     document.getElementById("login-screen").style.display = "none";
     const dash = document.getElementById("dashboard");
     dash.style.display = "block";
 
     // Header
-    document.getElementById("topbar-client-name").textContent = client.name;
-    document.getElementById("header-client-name").textContent = client.name;
+    document.getElementById("topbar-client-name").textContent = client.name || "—";
+    document.getElementById("header-client-name").textContent = client.name || "Dashboard";
     document.getElementById("header-plan-info").textContent =
-      `${client.plan} Plan · ${client.industry} · ${client.status === "active" ? "Active subscription" : "Inactive"}`;
+      `${client.plan || "—"} Plan · ${client.industry || "—"} · ${client.status === "active" ? "Active subscription" : client.status === "trial" ? "Trial" : "Inactive"}`;
+
+    // FIX 4: Compute tasksRemaining defensively in case it's missing from the object
+    const tasksUsed      = Number(client.tasksUsed)      || 0;
+    const tasksLimit     = Number(client.tasksLimit)      || 0;
+    const tasksRemaining = client.tasksRemaining != null
+      ? Number(client.tasksRemaining)
+      : Math.max(0, tasksLimit - tasksUsed);
 
     // Stats
-    document.getElementById("stat-used").textContent = client.tasksUsed.toLocaleString();
-    document.getElementById("stat-remaining").textContent = client.tasksRemaining.toLocaleString();
-    document.getElementById("stat-plan").textContent = client.plan;
-    document.getElementById("stat-plan-limit").textContent = `${client.tasksLimit.toLocaleString()} tasks/month`;
-    document.getElementById("stat-status").textContent = client.status === "active" ? "Active" : "Inactive";
-    document.getElementById("stat-industry").textContent = client.industry;
+    document.getElementById("stat-used").textContent      = tasksUsed.toLocaleString();
+    document.getElementById("stat-remaining").textContent = tasksRemaining.toLocaleString();
+    document.getElementById("stat-plan").textContent      = client.plan || "—";
+    document.getElementById("stat-plan-limit").textContent = `${tasksLimit.toLocaleString()} tasks/month`;
 
-    // Usage bar
-    const pct = Math.min(100, Math.round((client.tasksUsed / client.tasksLimit) * 100));
+    const statusText  = client.status === "active" ? "Active" : client.status === "trial" ? "Trial" : "Inactive";
+    const statusColor = client.status === "active" ? "green" : client.status === "trial" ? "orange" : "";
+    const statusEl    = document.getElementById("stat-status");
+    statusEl.textContent = statusText;
+    statusEl.className   = `stat-value ${statusColor}`;
+    document.getElementById("stat-industry").textContent = client.industry || "—";
+
+    // Usage bar — FIX 5: guard against tasksLimit=0 to avoid NaN/Infinity
+    const pct = tasksLimit > 0 ? Math.min(100, Math.round((tasksUsed / tasksLimit) * 100)) : 0;
     document.getElementById("usage-pct-badge").textContent = `${pct}% used`;
-    document.getElementById("bar-used").textContent = client.tasksUsed.toLocaleString();
-    document.getElementById("bar-limit").textContent = client.tasksLimit.toLocaleString();
+    document.getElementById("bar-used").textContent        = tasksUsed.toLocaleString();
+    document.getElementById("bar-limit").textContent       = tasksLimit.toLocaleString();
     setTimeout(() => {
       document.getElementById("usage-bar-fill").style.width = `${pct}%`;
     }, 100);
 
     // Plan pills
     const planInfo = {
-      Starter: { price: "₦250,000/mo", icon: "⚡" },
-      Growth:  { price: "₦600,000/mo", icon: "🚀" },
+      Starter:    { price: "₦250,000/mo", icon: "⚡" },
+      Growth:     { price: "₦600,000/mo", icon: "🚀" },
       Enterprise: { price: "₦1,500,000/mo", icon: "🏢" },
     };
     const info = planInfo[client.plan] || { price: "Custom", icon: "✨" };
     document.getElementById("plan-pills").innerHTML = `
-      <div class="plan-pill"><span class="icon">${info.icon}</span><span class="pill-label">Plan:</span><span class="pill-val">${client.plan}</span></div>
+      <div class="plan-pill"><span class="icon">${info.icon}</span><span class="pill-label">Plan:</span><span class="pill-val">${client.plan || "—"}</span></div>
       <div class="plan-pill"><span class="icon">💳</span><span class="pill-label">Price:</span><span class="pill-val">${info.price}</span></div>
-      <div class="plan-pill"><span class="icon">📊</span><span class="pill-label">Tasks:</span><span class="pill-val">${client.tasksUsed} / ${client.tasksLimit}</span></div>
-      <div class="plan-pill"><span class="icon">🏭</span><span class="pill-label">Industry:</span><span class="pill-val">${client.industry}</span></div>
+      <div class="plan-pill"><span class="icon">📊</span><span class="pill-label">Tasks:</span><span class="pill-val">${tasksUsed.toLocaleString()} / ${tasksLimit.toLocaleString()}</span></div>
+      <div class="plan-pill"><span class="icon">🏭</span><span class="pill-label">Industry:</span><span class="pill-val">${client.industry || "—"}</span></div>
     `;
 
-    // Embed code
     renderEmbedCode(currentApiKey, client);
-
-    // Load audit log
     loadAuditLog();
   }
 
@@ -1030,12 +998,9 @@
     const theme = client.industry === "HMO" ? "blue"
       : client.industry === "Bank" ? "dark"
       : "green";
-
     const raw = `<script\n  src="https://dominicyogi.github.io/agentflow-widget/widget.js"\n  data-api-key="${apiKey}"\n  data-theme="${theme}">\n<\/script>`;
-
     document.getElementById("embed-code-block").innerHTML =
       `<span class="tag">&lt;script</span>\n  <span class="attr">src</span>=<span class="val">"https://dominicyogi.github.io/agentflow-widget/widget.js"</span>\n  <span class="attr">data-api-key</span>=<span class="val">"${apiKey}"</span>\n  <span class="attr">data-theme</span>=<span class="val">"${theme}"</span><span class="tag">&gt;\n&lt;/script&gt;</span>`;
-
     document.getElementById("embed-code-block").dataset.raw = raw;
   }
 
@@ -1069,21 +1034,18 @@
       });
       const data = await res.json();
 
-      if (!data.success || data.logs.length === 0) {
+      if (!data.success || !data.logs || data.logs.length === 0) {
         list.innerHTML = `<div class="audit-empty">🤖 No actions yet. Use the widget to start processing tasks — they'll appear here.</div>`;
         document.getElementById("audit-count-badge").textContent = "0 entries";
         return;
       }
 
       document.getElementById("audit-count-badge").textContent = `${data.total} entries`;
-
       list.innerHTML = data.logs.map((log, i) => buildAuditEntry(log, i)).join("");
 
-      // Attach expand toggles
       list.querySelectorAll(".audit-entry-header").forEach(hdr => {
         hdr.addEventListener("click", () => {
-          const entry = hdr.closest(".audit-entry-wrap");
-          entry.classList.toggle("expanded");
+          hdr.closest(".audit-entry-wrap").classList.toggle("expanded");
         });
       });
 
@@ -1098,17 +1060,13 @@
     const details = log.actionDetails || [];
     const results = log.results       || [];
 
-    const hasFailedStep = details.some(a => a.success === false)
-      || results.some(r => /could not|error/i.test(r));
-
+    const hasFailedStep = details.some(a => a.success === false) || results.some(r => /could not|error/i.test(r));
     const statusIcon  = hasFailedStep ? "⚠️" : "✅";
     const statusClass = hasFailedStep ? "escalate" : "approved";
     const statusLabel = hasFailedStep ? "Partial" : "Success";
-
     const timeAgo  = formatTimeAgo(log.timestamp);
     const fullTime = log.timestamp ? new Date(log.timestamp).toLocaleString() : "—";
 
-    // ── Action steps ──
     const stepsHtml = details.length
       ? details.map(a => {
           const ok = a.success !== false;
@@ -1116,13 +1074,12 @@
             <span class="a-dot"></span>
             <span class="a-type">${escapeHtml(a.type || "")}</span>
             <span class="a-desc">${escapeHtml(a.description || "")}</span>
-            ${a.value ? `<span class="a-val">→ "${escapeHtml(String(a.value))}"</span>` : ""}
+            ${a.value     ? `<span class="a-val">→ "${escapeHtml(String(a.value))}"</span>` : ""}
             ${a.elementId ? `<span class="a-eid">#${escapeHtml(a.elementId)}</span>` : ""}
           </div>`;
         }).join("")
       : `<div class="a-empty">No step breakdown recorded</div>`;
 
-    // ── Raw results ──
     const resultsHtml = results.length
       ? results.map(r => {
           const clean = String(r).replace(/<[^>]+>/g, "");
@@ -1131,7 +1088,6 @@
         }).join("")
       : `<div class="a-empty">No results recorded</div>`;
 
-    // ── Device badges ──
     const devBadges = [
       d.os        && `<span class="dev-badge">💻 ${escapeHtml(d.os)}</span>`,
       d.browser   && `<span class="dev-badge">🌐 ${escapeHtml(d.browser)}</span>`,
@@ -1143,7 +1099,6 @@
 
     return `
     <div class="audit-entry-wrap" style="animation-delay:${i * 0.03}s">
-      <!-- ── Summary row (always visible) ── -->
       <div class="audit-entry-header audit-entry">
         <div class="audit-icon ${statusClass}">${statusIcon}</div>
         <div class="audit-body">
@@ -1151,8 +1106,8 @@
           <div class="audit-meta">
             <span class="audit-tag ${statusClass}">${statusLabel}</span>
             <span class="audit-time">🕐 ${timeAgo}</span>
-            ${op.name ? `<span class="audit-page">👤 ${escapeHtml(op.name)}</span>` : ""}
-            ${d.ip    ? `<span class="audit-page">📡 ${escapeHtml(d.ip)}</span>` : ""}
+            ${op.name      ? `<span class="audit-page">👤 ${escapeHtml(op.name)}</span>` : ""}
+            ${d.ip         ? `<span class="audit-page">📡 ${escapeHtml(d.ip)}</span>` : ""}
             ${log.pageTitle ? `<span class="audit-page">📄 ${escapeHtml(log.pageTitle)}</span>` : ""}
             ${details.length ? `<span class="audit-page">⚡ ${details.length} step${details.length !== 1 ? "s" : ""}</span>` : ""}
           </div>
@@ -1160,10 +1115,7 @@
         <div class="audit-expand-arrow">▶</div>
       </div>
 
-      <!-- ── Full detail (shown on expand) ── -->
       <div class="audit-detail">
-
-        <!-- Row 1: What / When+Where / Who -->
         <div class="ad-grid-3">
           <div class="ad-section">
             <div class="ad-title">What happened</div>
@@ -1188,15 +1140,11 @@
             ${adRow("Session", d.sessionId ? "…" + d.sessionId.slice(-16) : "—")}
           </div>
         </div>
-
-        <!-- Row 2: Device -->
         <div class="ad-section ad-section-full">
           <div class="ad-title">Device fingerprint</div>
           <div class="ad-badges">${devBadges}</div>
           ${adRow("User Agent", d.userAgent || "—")}
         </div>
-
-        <!-- Row 3: Steps + Results -->
         <div class="ad-grid-2">
           <div class="ad-section">
             <div class="ad-title">Action steps (${details.length})</div>
@@ -1207,7 +1155,6 @@
             <div class="a-results">${resultsHtml}</div>
           </div>
         </div>
-
         <div class="ad-full-link">
           <a href="audit-trail.html" target="_blank">↗ Open full audit trail viewer</a>
         </div>
@@ -1237,19 +1184,22 @@
   }
 
   function escapeHtml(str) {
-    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
   }
 
-
-  function logout() {
+  // FIX 1: Renamed from logout() → doLogout() to match the onclick="doLogout()" call
+  function doLogout() {
     currentApiKey = "";
     clientData = null;
     sessionStorage.removeItem("af_client_session");
     document.getElementById("login-screen").style.display = "flex";
-    document.getElementById("dashboard").style.display = "none";
-    document.getElementById("email-input").value = "";
+    document.getElementById("dashboard").style.display   = "none";
+    document.getElementById("email-input").value    = "";
     document.getElementById("password-input").value = "";
-    document.getElementById("login-btn").disabled = false;
+    document.getElementById("login-btn").disabled   = false;
     document.getElementById("login-btn").textContent = "Sign in →";
     document.getElementById("login-error").style.display = "none";
   }
@@ -1262,11 +1212,13 @@
         const client = JSON.parse(cached);
         currentApiKey = client.apiKey;
         clientData    = client;
-        renderDashboard(client);
-      } catch { sessionStorage.removeItem("af_client_session"); }
+        // FIX 6: On restore, also refresh live stats so usage is never stale
+        refreshClientStats(client);
+      } catch {
+        sessionStorage.removeItem("af_client_session");
+      }
     }
   });
-  
 </script>
 </body>
 </html>
