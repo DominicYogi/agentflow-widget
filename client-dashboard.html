@@ -676,16 +676,24 @@
       <span>AgentFlow</span>
     </div>
     <h1 class="login-title">Welcome back</h1>
-    <p class="login-sub">Enter your API key to access your dashboard</p>
+    <p class="login-sub">Sign in with your email and password</p>
 
-    <label class="field-label" for="api-key-input">API Key</label>
+    <label class="field-label" for="email-input">Email Address</label>
     <input
       class="field-input"
-      id="api-key-input"
+      id="email-input"
+      type="email"
+      placeholder="you@company.com"
+      autocomplete="email"
+      style="margin-bottom:16px;"
+    />
+    <label class="field-label" for="password-input">Password</label>
+    <input
+      class="field-input"
+      id="password-input"
       type="password"
-      placeholder="af_live_xxxxxxxxxxxxxxxx"
-      autocomplete="off"
-      spellcheck="false"
+      placeholder="Your dashboard password"
+      autocomplete="current-password"
     />
 
     <button class="login-btn" id="login-btn" onclick="doLogin()">
@@ -823,14 +831,14 @@
   let clientData = null;
 
   // ── Login ───────────────────────────────────────────────
-  document.getElementById("api-key-input").addEventListener("keydown", e => {
+  document.getElementById("password-input").addEventListener("keydown", e => {
     if (e.key === "Enter") doLogin();
   });
 
   async function doLogin() {
-    const key = document.getElementById("api-key-input").value.trim();
-    if (!key) return;
-
+    const email    = (document.getElementById("email-input").value || "").trim();
+    const password = (document.getElementById("password-input").value || "").trim();
+    if (!email || !password) return;
     const btn = document.getElementById("login-btn");
     const err = document.getElementById("login-error");
     btn.disabled = true;
@@ -838,22 +846,22 @@
     err.style.display = "none";
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
-        headers: {
-          "x-api-key": key,
-          "ngrok-skip-browser-warning": "true"
-        }
+      const res = await fetch(`${BACKEND_URL}/api/client/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
       });
 
       const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Login failed");
 
-      if (!data.success) throw new Error(data.error || "Invalid key");
-
-      currentApiKey = key;
-      clientData = data.client;
+      currentApiKey = data.client.apiKey;
+      clientData    = data.client;
+      sessionStorage.setItem("af_client_session", JSON.stringify(data.client));
       renderDashboard(data.client);
 
     } catch (err2) {
+      err.textContent   = err2.message || "Invalid email or password.";
       err.style.display = "block";
       btn.disabled = false;
       btn.textContent = "Sign in →";
@@ -1014,13 +1022,31 @@
   }
 
 
+  function logout() {
     currentApiKey = "";
     clientData = null;
+    sessionStorage.removeItem("af_client_session");
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("dashboard").style.display = "none";
-    document.getElementById("api-key-input").value = "";
+    document.getElementById("email-input").value = "";
+    document.getElementById("password-input").value = "";
     document.getElementById("login-btn").disabled = false;
     document.getElementById("login-btn").textContent = "Sign in →";
+    document.getElementById("login-error").style.display = "none";
+  }
+
+  // Auto-restore session on page refresh
+  window.addEventListener("load", () => {
+    const cached = sessionStorage.getItem("af_client_session");
+    if (cached) {
+      try {
+        const client = JSON.parse(cached);
+        currentApiKey = client.apiKey;
+        clientData    = client;
+        renderDashboard(client);
+      } catch { sessionStorage.removeItem("af_client_session"); }
+    }
+  });
   
 </script>
 </body>
