@@ -347,12 +347,23 @@
 
     document.querySelectorAll("button,[role='button'],input[type='button'],input[type='submit']").forEach(el => {
       if (el.id === "af-launcher" || el.closest("#af-panel")) return;
-      buttons.push({ afId: afId(el), type: "button", text: (el.textContent || el.value || "").trim().slice(0, 60), id: el.id || null, disabled: el.disabled });
+      const stepEl = el.closest("[data-wizard-step]");
+      const stepInfo = stepEl ? ` [wizard-step-${stepEl.dataset.wizardStep}]` : "";
+      buttons.push({ afId: afId(el), type: "button", text: ((el.textContent || el.value || "").trim().slice(0, 60)) + stepInfo, id: el.id || null, disabled: el.disabled });
     });
 
     document.querySelectorAll("input:not([type='button']):not([type='submit']),textarea,select").forEach(el => {
       if (el.id === "af-input" || el.closest("#af-panel")) return;
-      inputs.push({ afId: afId(el), type: el.tagName.toLowerCase(), placeholder: el.placeholder || null, label: el.labels?.[0]?.textContent?.trim() || null, id: el.id || null, value: el.value || null });
+      const stepEl = el.closest("[data-wizard-step]");
+      const step = stepEl ? parseInt(stepEl.dataset.wizardStep) : null;
+      const isVisible = !stepEl || stepEl.classList.contains("active") || getComputedStyle(stepEl).display !== "none";
+      inputs.push({
+        afId: afId(el), type: el.tagName.toLowerCase(),
+        placeholder: el.placeholder || null,
+        label: el.labels?.[0]?.textContent?.trim() || el.closest(".form-group")?.querySelector(".form-label")?.textContent?.trim() || null,
+        id: el.id || null, value: el.value || null,
+        wizardStep: step, visible: isVisible
+      });
     });
 
     document.querySelectorAll("a[href]").forEach(el => {
@@ -414,7 +425,26 @@
           case "click":
             el.click();
             results.push({ ok: true, msg: `🖱️ Clicked <strong>${action.description}</strong>` });
+            await sleep(600); // Wait for DOM transitions after click
             break;
+
+          case "click_by_text": {
+            // Find any button/element by text — used for wizard navigation
+            const text = (action.value || action.description || "").toLowerCase().trim();
+            const allBtns = Array.from(document.querySelectorAll("button,[role='button']"))
+              .filter(b => !b.closest("#af-panel"));
+            const match = allBtns.find(b => b.textContent.trim().toLowerCase().includes(text));
+            if (match) {
+              match.scrollIntoView({ behavior: "smooth", block: "center" });
+              await sleep(300);
+              match.click();
+              results.push({ ok: true, msg: `🖱️ Clicked "<strong>${match.textContent.trim().slice(0,40)}</strong>"` });
+              await sleep(700); // Wait for page transition
+            } else {
+              results.push({ ok: false, msg: `⚠️ Could not find button with text: "${action.value}"` });
+            }
+            break;
+          }
 
           case "fill":
             el.focus();
@@ -423,6 +453,26 @@
             el.dispatchEvent(new Event("change", { bubbles: true }));
             results.push({ ok: true, msg: `✏️ Filled <strong>${action.description}</strong> → "${action.value}"` });
             break;
+
+          case "fill_by_label": {
+            // Find input by its label text — works even if afId changed after navigation
+            const labelText = (action.value || "").toLowerCase();
+            const targetLabel = Array.from(document.querySelectorAll(".form-label, label"))
+              .find(l => l.textContent.trim().toLowerCase().includes(labelText));
+            const targetInput = targetLabel
+              ? (targetLabel.nextElementSibling || document.getElementById(targetLabel.getAttribute("for")))
+              : null;
+            if (targetInput && (targetInput.tagName === "INPUT" || targetInput.tagName === "TEXTAREA" || targetInput.tagName === "SELECT")) {
+              targetInput.focus();
+              targetInput.value = action.description; // description holds the value to fill
+              targetInput.dispatchEvent(new Event("input",  { bubbles: true }));
+              targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+              results.push({ ok: true, msg: `✏️ Filled "${labelText}" → "${action.description}"` });
+            } else {
+              results.push({ ok: false, msg: `⚠️ Could not find field labelled: "${labelText}"` });
+            }
+            break;
+          }
 
           case "select":
             el.value = action.value;

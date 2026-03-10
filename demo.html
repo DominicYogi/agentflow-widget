@@ -667,7 +667,7 @@
       </div>
 
       <!-- ── STEP 1: Personal Info ── -->
-      <div class="step-page active" id="enroll-step-1">
+      <div class="step-page active" id="enroll-step-1" data-wizard-step="1">
         <div class="enroll-card">
           <h3>👤 Personal Information</h3>
           <div class="enroll-desc">Enter the new member's full name, contact details and employment info.</div>
@@ -716,13 +716,13 @@
           </div>
           <div class="enroll-nav">
             <span style="font-size:12px;color:var(--text-muted);">Step 1 of 4 — Personal Information</span>
-            <button class="e-btn e-primary" onclick="enrollGoTo(2)">Next: Plan Selection →</button>
+            <button class="e-btn e-primary" id="enroll-next-1" onclick="enrollGoTo(2)">Next: Plan Selection →</button>
           </div>
         </div>
       </div>
 
       <!-- ── STEP 2: Plan & Coverage ── -->
-      <div class="step-page" id="enroll-step-2">
+      <div class="step-page" id="enroll-step-2" data-wizard-step="2">
         <div class="enroll-card">
           <h3>📋 Plan & Coverage</h3>
           <div class="enroll-desc">Select the health plan, coverage type and preferred hospital for this member.</div>
@@ -790,53 +790,53 @@
           </div>
           <div class="enroll-nav">
             <button class="e-btn e-ghost" onclick="enrollGoTo(1)">← Back</button>
-            <button class="e-btn e-primary" onclick="enrollGoTo(3)">Next: Documents →</button>
+            <button class="e-btn e-primary" id="enroll-next-2" onclick="enrollGoTo(3)">Next: Documents →</button>
           </div>
         </div>
       </div>
 
       <!-- ── STEP 3: Documents ── -->
-      <div class="step-page" id="enroll-step-3">
+      <div class="step-page" id="enroll-step-3" data-wizard-step="3">
         <div class="enroll-card">
           <h3>📂 Document Verification</h3>
           <div class="enroll-desc">Tick each document as you physically verify and collect it from the member. All required items must be checked before proceeding.</div>
 
           <div class="doc-list">
-            <div class="doc-item" id="doc-id" onclick="toggleDoc('doc-id')">
+            <button type="button" class="doc-item" id="doc-id" onclick="toggleDoc('doc-id')">
               <div class="doc-box" id="docbox-id"></div>
               <div>
                 <div class="doc-title">Valid Government-Issued ID <span style="color:var(--red);font-size:11px;">Required</span></div>
                 <div class="doc-sub">National ID card, International Passport, Voter's Card or Driver's Licence</div>
               </div>
-            </div>
-            <div class="doc-item" id="doc-photo" onclick="toggleDoc('doc-photo')">
+            </button>
+            <button type="button" class="doc-item" id="doc-photo" onclick="toggleDoc('doc-photo')">
               <div class="doc-box" id="docbox-photo"></div>
               <div>
                 <div class="doc-title">Passport Photograph <span style="color:var(--red);font-size:11px;">Required</span></div>
                 <div class="doc-sub">Recent passport-size photo, white background (2 copies)</div>
               </div>
-            </div>
-            <div class="doc-item" id="doc-letter" onclick="toggleDoc('doc-letter')">
+            </button>
+            <button type="button" class="doc-item" id="doc-letter" onclick="toggleDoc('doc-letter')">
               <div class="doc-box" id="docbox-letter"></div>
               <div>
                 <div class="doc-title">Employer Introduction Letter <span style="color:var(--red);font-size:11px;">Required</span></div>
                 <div class="doc-sub">Company letterhead confirming employment and eligibility for coverage</div>
               </div>
-            </div>
-            <div class="doc-item" id="doc-form" onclick="toggleDoc('doc-form')">
+            </button>
+            <button type="button" class="doc-item" id="doc-form" onclick="toggleDoc('doc-form')">
               <div class="doc-box" id="docbox-form"></div>
               <div>
                 <div class="doc-title">Signed Enrollment Form <span style="color:var(--red);font-size:11px;">Required</span></div>
                 <div class="doc-sub">Completed MediCare HMO form with member signature and date</div>
               </div>
-            </div>
-            <div class="doc-item" id="doc-medical" onclick="toggleDoc('doc-medical')">
+            </button>
+            <button type="button" class="doc-item" id="doc-medical" onclick="toggleDoc('doc-medical')">
               <div class="doc-box" id="docbox-medical"></div>
               <div>
                 <div class="doc-title">Medical History Form <span style="color:var(--text-muted);font-size:11px;">If applicable</span></div>
                 <div class="doc-sub">Required if member declared any pre-existing medical conditions</div>
               </div>
-            </div>
+            </button>
           </div>
 
           <div class="form-group" style="margin-top:20px;">
@@ -850,13 +850,13 @@
 
           <div class="enroll-nav">
             <button class="e-btn e-ghost" onclick="enrollGoTo(2)">← Back</button>
-            <button class="e-btn e-primary" onclick="enrollGoTo(4)">Next: Review & Submit →</button>
+            <button class="e-btn e-primary" id="enroll-next-3" onclick="enrollGoTo(4)">Next: Review & Submit →</button>
           </div>
         </div>
       </div>
 
       <!-- ── STEP 4: Review & Submit ── -->
-      <div class="step-page" id="enroll-step-4">
+      <div class="step-page" id="enroll-step-4" data-wizard-step="4">
         <div class="enroll-card">
           <h3>✅ Review & Confirm Enrollment</h3>
           <div class="enroll-desc">Confirm all details before submitting. A Member ID will be generated automatically on submission.</div>
