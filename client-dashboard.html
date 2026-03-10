@@ -656,79 +656,118 @@
       line-height: 1.6;
     }
 
-    /* ── Audit trail v2 ── */
-    .audit-entry {
-      border: 1px solid var(--border); border-radius: 14px;
-      padding: 16px 18px; margin-bottom: 12px;
-      background: var(--card); animation: fadeUp 0.3s ease both;
-      transition: border-color 0.2s;
-    }
-    .audit-entry:hover { border-color: var(--accent); }
-    .audit-top {
-      display: flex; align-items: flex-start; gap: 14px; margin-bottom: 10px;
-    }
-    .audit-icon {
-      width: 38px; height: 38px; border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 17px; flex-shrink: 0;
-    }
-    .audit-icon.approved  { background: rgba(0,229,160,0.12); }
-    .audit-icon.rejected  { background: rgba(255,92,122,0.12); }
-    .audit-icon.escalated { background: rgba(255,181,71,0.12); }
-    .audit-icon.task      { background: rgba(124,111,255,0.12); }
-    .audit-body { flex: 1; min-width: 0; }
-    .audit-command { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-    .audit-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-    .audit-tag {
-      font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
-      text-transform: uppercase; letter-spacing: 0.5px;
-    }
-    .audit-tag.approved  { background: rgba(0,229,160,0.15); color: var(--accent); }
-    .audit-tag.rejected  { background: rgba(255,92,122,0.15); color: var(--danger); }
-    .audit-tag.escalated { background: rgba(255,181,71,0.15); color: var(--warning); }
-    .audit-tag.task      { background: rgba(124,111,255,0.15); color: var(--accent2); }
-    .audit-time  { font-size: 11px; color: var(--muted); }
-    .audit-page  { font-size: 11px; color: var(--muted); }
-
-    /* Device + operator strip */
-    .audit-device-strip {
-      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-      padding: 8px 12px; background: rgba(255,255,255,0.03);
-      border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);
-      margin-top: 4px;
-    }
-    .audit-chip {
-      display: flex; align-items: center; gap: 4px;
-      font-size: 10px; color: var(--muted); white-space: nowrap;
-    }
-    .audit-chip .chip-icon { font-size: 11px; }
-    .audit-chip strong { color: #b0b0cc; font-weight: 600; }
-
-    /* Action details accordion */
-    .audit-actions-toggle {
-      font-size: 11px; color: var(--accent2); cursor: pointer;
-      background: none; border: none; padding: 0; font-family: inherit;
-      margin-top: 6px; display: inline-flex; align-items: center; gap: 4px;
-    }
-    .audit-actions-toggle:hover { opacity: 0.8; }
-    .audit-actions-list {
-      display: none; margin-top: 8px;
-      border-left: 2px solid var(--border); padding-left: 12px;
-    }
-    .audit-actions-list.open { display: block; }
-    .audit-action-item {
-      font-size: 11px; color: var(--muted); padding: 3px 0;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .audit-action-item.ok   { color: #6ee7b7; }
-    .audit-action-item.fail { color: var(--danger); }
-
     .audit-empty {
-
       text-align: center;
       padding: 48px;
       color: var(--muted);
       font-size: 14px;
+    }
+
+    /* ── Expandable audit entries ── */
+    .audit-entry-wrap {
+      border-bottom: 1px solid var(--border);
+      animation: fadeUp 0.3s ease both;
+    }
+    .audit-entry-wrap:last-child { border-bottom: none; }
+
+    .audit-entry-header {
+      cursor: pointer;
+      border-bottom: none;
+      padding: 16px 0;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .audit-entry-header:hover { background: rgba(255,255,255,0.015); }
+
+    .audit-expand-arrow {
+      font-size: 11px; color: var(--muted);
+      flex-shrink: 0; margin-left: auto; padding-left: 12px;
+      transition: transform 0.2s, color 0.2s;
+    }
+    .audit-entry-wrap.expanded .audit-expand-arrow {
+      transform: rotate(90deg); color: var(--accent);
+    }
+    .audit-entry-wrap.expanded .audit-command { white-space: normal; }
+
+    .audit-detail {
+      display: none;
+      background: rgba(0,0,0,0.18);
+      border-top: 1px solid var(--border);
+      padding: 0 0 4px 0;
+    }
+    .audit-entry-wrap.expanded .audit-detail { display: block; }
+
+    .ad-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+    .ad-grid-2 { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border); }
+
+    .ad-section {
+      padding: 18px 20px;
+      border-right: 1px solid var(--border);
+    }
+    .ad-section:last-child { border-right: none; }
+    .ad-section-full {
+      border-top: 1px solid var(--border);
+      border-right: none !important;
+      padding: 18px 20px;
+    }
+
+    .ad-title {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 12px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .ad-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 12px; padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      font-size: 12px;
+    }
+    .ad-row:last-child { border-bottom: none; }
+    .ad-key { color: var(--muted); flex-shrink: 0; }
+    .ad-val { color: var(--text); font-family: 'DM Mono', monospace; font-size: 11px; text-align: right; word-break: break-all; max-width: 55%; }
+    .ad-url { color: #6c63ff; }
+
+    .ad-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .dev-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 9px; font-size: 11px; color: var(--text);
+    }
+
+    .a-steps, .a-results { display: flex; flex-direction: column; gap: 5px; }
+    .a-step {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 7px 10px; border-radius: 6px; font-size: 11px;
+      background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    }
+    .a-step.a-ok   { border-color: rgba(0,229,160,0.2); }
+    .a-step.a-fail { border-color: rgba(255,92,122,0.2); background: rgba(255,92,122,0.04); }
+    .a-dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 3px; flex-shrink: 0; }
+    .a-ok .a-dot   { background: var(--accent); }
+    .a-fail .a-dot { background: var(--danger); }
+    .a-type {
+      font-family: 'DM Mono', monospace; font-size: 10px;
+      color: #6c63ff; background: rgba(108,99,255,0.1);
+      padding: 1px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0;
+    }
+    .a-desc { color: var(--text); flex: 1; }
+    .a-val  { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 10px; word-break: break-all; }
+    .a-eid  { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 10px; }
+    .a-empty { font-size: 11px; color: var(--muted); padding: 8px 0; }
+
+    .r-item { font-size: 11px; padding: 5px 9px; border-radius: 6px; background: rgba(255,255,255,0.02); color: var(--muted); }
+    .r-ok   { color: #6ee7b7; }
+    .r-fail { color: var(--danger); }
+
+    .ad-full-link { border-top: 1px solid var(--border); padding: 10px 20px; text-align: right; }
+    .ad-full-link a { font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 600; }
+    .ad-full-link a:hover { text-decoration: underline; }
+
+    @media (max-width: 800px) {
+      .ad-grid-3, .ad-grid-2 { grid-template-columns: 1fr; }
+      .ad-section { border-right: none; border-bottom: 1px solid var(--border); }
     }
   </style>
 </head>
@@ -1023,12 +1062,10 @@
 
   async function loadAuditLog() {
     const list = document.getElementById("audit-log-list");
+    list.innerHTML = `<div class="audit-empty">⏳ Loading...</div>`;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/agent/logs?limit=50`, {
-        headers: {
-          "x-api-key": currentApiKey,
-          "ngrok-skip-browser-warning": "true"
-        }
+      const res = await fetch(`${BACKEND_URL}/api/agent/logs?limit=200`, {
+        headers: { "x-api-key": currentApiKey, "ngrok-skip-browser-warning": "true" }
       });
       const data = await res.json();
 
@@ -1040,76 +1077,151 @@
 
       document.getElementById("audit-count-badge").textContent = `${data.total} entries`;
 
-      list.innerHTML = data.logs.map((log, i) => {
-        const act = log.action || "task";
-        const actionClass = act === "approved" ? "approved"
-          : act === "rejected" ? "rejected"
-          : act === "escalated" ? "escalated" : "task";
-        const actionIcon = act === "approved" ? "✅"
-          : act === "rejected" ? "❌"
-          : act === "escalated" ? "⚠️" : "⚡";
-        const actionLabel = act.charAt(0).toUpperCase() + act.slice(1);
+      list.innerHTML = data.logs.map((log, i) => buildAuditEntry(log, i)).join("");
 
-        const timeAgo  = formatTimeAgo(log.timestamp);
-        const operator = log.operator?.name || "Unknown Operator";
-        const dev      = log.device || {};
-        const os       = dev.os       || "—";
-        const browser  = dev.browser  || "—";
-        const screen   = dev.screenRes|| "—";
-        const tz       = dev.timezone || "—";
-        const ip       = dev.ip       || "—";
-        const session  = dev.sessionId ? dev.sessionId.slice(-8) : "—";
-
-        // Action details accordion
-        const details = log.actionDetails || [];
-        const detailId = "ad-" + log.id;
-        const detailHtml = details.length ? `
-          <button class="audit-actions-toggle" onclick="toggleDetails('${detailId}')">
-            ▸ ${details.length} action${details.length !== 1 ? "s" : ""} executed
-          </button>
-          <div class="audit-actions-list" id="${detailId}">
-            ${details.map(a => `
-              <div class="audit-action-item ${a.success === false ? "fail" : "ok"}">
-                <span>${a.success === false ? "✗" : "✓"}</span>
-                <span>${escapeHtml(a.type || "")} — ${escapeHtml(a.description || "")}${a.value ? ` → "${escapeHtml(a.value)}"` : ""}</span>
-              </div>`).join("")}
-          </div>` : "";
-
-        // Legacy items support
-        const itemsHtml = !details.length && log.items?.length
-          ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;">↳ ${log.items.slice(0,3).join(" · ")}${log.items.length > 3 ? ` +${log.items.length-3} more` : ""}</div>`
-          : "";
-
-        return `
-          <div class="audit-entry" style="animation-delay:${i * 0.04}s">
-            <div class="audit-top">
-              <div class="audit-icon ${actionClass}">${actionIcon}</div>
-              <div class="audit-body">
-                <div class="audit-command">${escapeHtml(log.command || "Task executed")}</div>
-                <div class="audit-meta">
-                  <span class="audit-tag ${actionClass}">${actionLabel}</span>
-                  <span class="audit-time">🕐 ${timeAgo}</span>
-                  ${log.pageTitle ? `<span class="audit-page">📄 ${escapeHtml(log.pageTitle)}</span>` : ""}
-                </div>
-                ${detailHtml}
-                ${itemsHtml}
-              </div>
-            </div>
-            <div class="audit-device-strip">
-              <div class="audit-chip"><span class="chip-icon">👤</span> <strong>${escapeHtml(operator)}</strong></div>
-              <div class="audit-chip"><span class="chip-icon">💻</span> <strong>${escapeHtml(os)}</strong></div>
-              <div class="audit-chip"><span class="chip-icon">🌐</span> <strong>${escapeHtml(browser)}</strong></div>
-              <div class="audit-chip"><span class="chip-icon">🖥️</span> <strong>${escapeHtml(screen)}</strong></div>
-              <div class="audit-chip"><span class="chip-icon">🌍</span> <strong>${escapeHtml(tz)}</strong></div>
-              <div class="audit-chip"><span class="chip-icon">📡</span> IP: <strong>${escapeHtml(ip)}</strong></div>
-              <div class="audit-chip"><span class="chip-icon">🔑</span> Session: <strong>…${escapeHtml(session)}</strong></div>
-            </div>
-          </div>`;
-      }).join("");
+      // Attach expand toggles
+      list.querySelectorAll(".audit-entry-header").forEach(hdr => {
+        hdr.addEventListener("click", () => {
+          const entry = hdr.closest(".audit-entry-wrap");
+          entry.classList.toggle("expanded");
+        });
+      });
 
     } catch (err) {
       list.innerHTML = `<div class="audit-empty">⚠️ Could not load audit log. Make sure the backend is running.</div>`;
     }
+  }
+
+  function buildAuditEntry(log, i) {
+    const d  = log.device     || {};
+    const op = log.operator   || {};
+    const details = log.actionDetails || [];
+    const results = log.results       || [];
+
+    const hasFailedStep = details.some(a => a.success === false)
+      || results.some(r => /could not|error/i.test(r));
+
+    const statusIcon  = hasFailedStep ? "⚠️" : "✅";
+    const statusClass = hasFailedStep ? "escalate" : "approved";
+    const statusLabel = hasFailedStep ? "Partial" : "Success";
+
+    const timeAgo  = formatTimeAgo(log.timestamp);
+    const fullTime = log.timestamp ? new Date(log.timestamp).toLocaleString() : "—";
+
+    // ── Action steps ──
+    const stepsHtml = details.length
+      ? details.map(a => {
+          const ok = a.success !== false;
+          return `<div class="a-step ${ok ? "a-ok" : "a-fail"}">
+            <span class="a-dot"></span>
+            <span class="a-type">${escapeHtml(a.type || "")}</span>
+            <span class="a-desc">${escapeHtml(a.description || "")}</span>
+            ${a.value ? `<span class="a-val">→ "${escapeHtml(String(a.value))}"</span>` : ""}
+            ${a.elementId ? `<span class="a-eid">#${escapeHtml(a.elementId)}</span>` : ""}
+          </div>`;
+        }).join("")
+      : `<div class="a-empty">No step breakdown recorded</div>`;
+
+    // ── Raw results ──
+    const resultsHtml = results.length
+      ? results.map(r => {
+          const clean = String(r).replace(/<[^>]+>/g, "");
+          const bad = /could not|error|⚠️/i.test(clean);
+          return `<div class="r-item ${bad ? "r-fail" : "r-ok"}">${escapeHtml(clean)}</div>`;
+        }).join("")
+      : `<div class="a-empty">No results recorded</div>`;
+
+    // ── Device badges ──
+    const devBadges = [
+      d.os        && `<span class="dev-badge">💻 ${escapeHtml(d.os)}</span>`,
+      d.browser   && `<span class="dev-badge">🌐 ${escapeHtml(d.browser)}</span>`,
+      d.screenRes && `<span class="dev-badge">🖥️ ${escapeHtml(d.screenRes)}</span>`,
+      d.timezone  && `<span class="dev-badge">🌍 ${escapeHtml(d.timezone)}</span>`,
+      d.language  && `<span class="dev-badge">🔤 ${escapeHtml(d.language)}</span>`,
+      d.ip        && `<span class="dev-badge">📡 ${escapeHtml(d.ip)}</span>`,
+    ].filter(Boolean).join("");
+
+    return `
+    <div class="audit-entry-wrap" style="animation-delay:${i * 0.03}s">
+      <!-- ── Summary row (always visible) ── -->
+      <div class="audit-entry-header audit-entry">
+        <div class="audit-icon ${statusClass}">${statusIcon}</div>
+        <div class="audit-body">
+          <div class="audit-command">${escapeHtml(log.command || "Task executed")}</div>
+          <div class="audit-meta">
+            <span class="audit-tag ${statusClass}">${statusLabel}</span>
+            <span class="audit-time">🕐 ${timeAgo}</span>
+            ${op.name ? `<span class="audit-page">👤 ${escapeHtml(op.name)}</span>` : ""}
+            ${d.ip    ? `<span class="audit-page">📡 ${escapeHtml(d.ip)}</span>` : ""}
+            ${log.pageTitle ? `<span class="audit-page">📄 ${escapeHtml(log.pageTitle)}</span>` : ""}
+            ${details.length ? `<span class="audit-page">⚡ ${details.length} step${details.length !== 1 ? "s" : ""}</span>` : ""}
+          </div>
+        </div>
+        <div class="audit-expand-arrow">▶</div>
+      </div>
+
+      <!-- ── Full detail (shown on expand) ── -->
+      <div class="audit-detail">
+
+        <!-- Row 1: What / When+Where / Who -->
+        <div class="ad-grid-3">
+          <div class="ad-section">
+            <div class="ad-title">What happened</div>
+            ${adRow("Command", log.command || "—")}
+            ${adRow("Action type", log.action || "task")}
+            ${adRow("Status", statusLabel)}
+            ${adRow("Steps", details.length)}
+            ${adRow("Rows affected", log.rowCount || 0)}
+          </div>
+          <div class="ad-section">
+            <div class="ad-title">When &amp; where</div>
+            ${adRow("Time", fullTime)}
+            ${adRow("Relative", timeAgo)}
+            ${adRow("Page", log.pageTitle || "—")}
+            ${adRow("URL", log.pageUrl || "—", true)}
+          </div>
+          <div class="ad-section">
+            <div class="ad-title">Who</div>
+            ${adRow("Operator", op.name || "Unknown")}
+            ${adRow("Detection", op.source === "page-scrape" ? "Auto-detected" : "Not detected")}
+            ${adRow("IP Address", d.ip || "—")}
+            ${adRow("Session", d.sessionId ? "…" + d.sessionId.slice(-16) : "—")}
+          </div>
+        </div>
+
+        <!-- Row 2: Device -->
+        <div class="ad-section ad-section-full">
+          <div class="ad-title">Device fingerprint</div>
+          <div class="ad-badges">${devBadges}</div>
+          ${adRow("User Agent", d.userAgent || "—")}
+        </div>
+
+        <!-- Row 3: Steps + Results -->
+        <div class="ad-grid-2">
+          <div class="ad-section">
+            <div class="ad-title">Action steps (${details.length})</div>
+            <div class="a-steps">${stepsHtml}</div>
+          </div>
+          <div class="ad-section">
+            <div class="ad-title">Raw results (${results.length})</div>
+            <div class="a-results">${resultsHtml}</div>
+          </div>
+        </div>
+
+        <div class="ad-full-link">
+          <a href="audit-trail.html" target="_blank">↗ Open full audit trail viewer</a>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function adRow(label, val, isUrl) {
+    const safe = escapeHtml(String(val));
+    const display = isUrl && safe.length > 70 ? safe.slice(0, 70) + "…" : safe;
+    return `<div class="ad-row">
+      <span class="ad-key">${label}</span>
+      <span class="ad-val ${isUrl ? "ad-url" : ""}" title="${safe}">${display}</span>
+    </div>`;
   }
 
   function formatTimeAgo(iso) {
@@ -1126,16 +1238,6 @@
 
   function escapeHtml(str) {
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-  }
-
-  function toggleDetails(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.classList.toggle("open");
-    const btn = el.previousElementSibling;
-    if (btn) btn.textContent = el.classList.contains("open")
-      ? btn.textContent.replace("▸", "▾")
-      : btn.textContent.replace("▾", "▸");
   }
 
 
