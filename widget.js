@@ -39,7 +39,7 @@
     #af-launcher:hover { transform: scale(1.08); box-shadow: 0 6px 28px ${theme.primary}77; }
 
     #af-panel {
-      position: fixed; bottom: 106px; right: 30px;
+      position: fixed; bottom: 106px; right: 30px; top: 16px;
       width: 400px;
       background: #fff;
       border-radius: 18px;
@@ -50,7 +50,7 @@
       border: 1px solid #e0e0e0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
       animation: af-up 0.22s ease;
-      max-height: 620px;
+      max-height: calc(100vh - 130px);
     }
     @keyframes af-up {
       from { opacity:0; transform:translateY(14px); }
