@@ -287,6 +287,109 @@
       100% { background: transparent; }
     }
     .ai-touched { animation: af-highlight 1.5s ease forwards; }
+
+    /* ══════════════════════════════
+       ENROLLMENT WIZARD
+    ══════════════════════════════ */
+    .wizard-bar {
+      display: flex; align-items: center;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px 28px; margin-bottom: 24px; gap: 0;
+    }
+    .wz-step { display: flex; align-items: center; gap: 10px; }
+    .wz-circle {
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; transition: all .3s;
+      border: 2px solid var(--border); color: var(--text-muted); background: var(--bg);
+    }
+    .wz-circle.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(37,99,235,.15); }
+    .wz-circle.done   { background: var(--green);   color: white; border-color: var(--green); }
+    .wz-label strong { display: block; font-size: 13px; font-weight: 700; color: var(--text); }
+    .wz-label span   { font-size: 11px; color: var(--text-muted); }
+    .wz-line { flex: 1; height: 2px; background: var(--border); margin: 0 14px; border-radius: 2px; transition: background .4s; }
+    .wz-line.done { background: var(--green); }
+
+    .enroll-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px 32px; margin-bottom: 16px;
+    }
+    .enroll-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .enroll-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+    .form-input, .form-select {
+      padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 13px; font-family: inherit; color: var(--text);
+      background: var(--surface); outline: none; transition: border .18s;
+    }
+    .form-input:focus, .form-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+    .form-input::placeholder { color: #c0c6d0; }
+
+    .enroll-nav {
+      display: flex; justify-content: space-between; align-items: center;
+      padding-top: 20px; border-top: 1px solid var(--border); margin-top: 20px;
+    }
+    .e-btn {
+      padding: 10px 22px; border-radius: 8px; font-size: 13px; font-weight: 700;
+      cursor: pointer; border: none; font-family: inherit; transition: all .18s;
+    }
+    .e-ghost   { background: var(--bg); border: 1.5px solid var(--border); color: var(--text-muted); }
+    .e-ghost:hover { border-color: var(--primary); color: var(--primary); }
+    .e-primary { background: var(--primary); color: white; }
+    .e-primary:hover { background: #1d4ed8; }
+    .e-success { background: var(--green); color: white; }
+    .e-success:hover { background: #047857; }
+    .e-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Checklist */
+    .doc-list { display: flex; flex-direction: column; gap: 10px; }
+    .doc-item {
+      display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px;
+      border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; transition: all .2s;
+    }
+    .doc-item:hover { border-color: var(--primary); background: var(--primary-light); }
+    .doc-item.checked { border-color: var(--green); background: var(--green-bg); }
+    .doc-box {
+      width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--border);
+      flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 12px; transition: all .2s; margin-top: 1px;
+    }
+    .doc-item.checked .doc-box { background: var(--green); border-color: var(--green); color: white; }
+    .doc-title { font-size: 13px; font-weight: 600; }
+    .doc-sub   { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Summary */
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+    .sum-box { background: var(--bg); border-radius: 10px; padding: 16px; }
+    .sum-box h4 { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; font-weight: 700; }
+    .sum-row { display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
+    .sum-row:last-child { border-bottom: none; }
+    .sum-key { color: var(--text-muted); }
+    .sum-val { font-weight: 600; color: var(--text); font-family: var(--mono); font-size: 11px; }
+
+    /* Step pages */
+    .step-page { display: none; }
+    .step-page.active { display: block; animation: fadeInStep .25s ease; }
+    @keyframes fadeInStep { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Success */
+    .enroll-success {
+      display: none; background: var(--green-bg); border: 1.5px solid var(--green);
+      border-radius: 14px; padding: 28px; margin-bottom: 20px;
+      align-items: center; gap: 20px;
+    }
+    .enroll-success.show { display: flex; }
+    .success-icon { font-size: 48px; }
+    .success-title { font-size: 18px; font-weight: 800; color: var(--green); }
+    .success-sub   { font-size: 13px; color: #065f46; margin-top: 6px; }
+    .success-id    { font-family: var(--mono); font-size: 16px; font-weight: 700; background: white; border: 1px solid var(--green); border-radius: 8px; padding: 6px 14px; display: inline-block; margin-top: 10px; color: var(--green); }
+    .new-enroll-btn { margin-top: 14px; padding: 9px 20px; background: var(--green); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; }
+    .new-enroll-btn:hover { background: #047857; }
+
   </style>
 </head>
 <body>
@@ -317,6 +420,10 @@
     </button>
     <button class="nav-item" onclick="showSection('providers',this)">
       <span class="nav-icon">🏨</span> Providers
+    </button>
+    <button class="nav-item" id="nav-enroll-btn" onclick="showSection('enroll',this)">
+      <span class="nav-icon">✍️</span> Enroll Member
+      <span class="nav-badge amber" id="nav-enroll-step">Step 1/4</span>
     </button>
   </div>
 
@@ -521,6 +628,260 @@
       </div>
     </div>
 
+
+    <!-- ══ ENROLL SECTION ══ -->
+    <div class="section" id="section-enroll">
+
+      <!-- Wizard progress bar -->
+      <div class="wizard-bar" id="wz-bar">
+        <div class="wz-step">
+          <div class="wz-circle active" id="wz-c1">1</div>
+          <div class="wz-label"><strong>Personal Info</strong><span>Member details</span></div>
+        </div>
+        <div class="wz-line" id="wz-l1"></div>
+        <div class="wz-step">
+          <div class="wz-circle" id="wz-c2">2</div>
+          <div class="wz-label"><strong>Plan & Coverage</strong><span>Health plan</span></div>
+        </div>
+        <div class="wz-line" id="wz-l2"></div>
+        <div class="wz-step">
+          <div class="wz-circle" id="wz-c3">3</div>
+          <div class="wz-label"><strong>Documents</strong><span>Verification</span></div>
+        </div>
+        <div class="wz-line" id="wz-l3"></div>
+        <div class="wz-step">
+          <div class="wz-circle" id="wz-c4">4</div>
+          <div class="wz-label"><strong>Review & Submit</strong><span>Confirm</span></div>
+        </div>
+      </div>
+
+      <!-- Success state -->
+      <div class="enroll-success" id="enroll-success">
+        <div class="success-icon">🎉</div>
+        <div>
+          <div class="success-title">Member Enrolled Successfully!</div>
+          <div class="success-sub" id="success-desc">The new member has been registered. Their ID card will be issued within 24 hours.</div>
+          <div class="success-id" id="success-member-id">MED-000000</div><br/>
+          <button class="new-enroll-btn" onclick="resetEnrollment()">+ Enroll Another Member</button>
+        </div>
+      </div>
+
+      <!-- ── STEP 1: Personal Info ── -->
+      <div class="step-page active" id="enroll-step-1">
+        <div class="enroll-card">
+          <h3>👤 Personal Information</h3>
+          <div class="enroll-desc">Enter the new member's full name, contact details and employment info.</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">First Name *</label>
+              <input type="text" class="form-input" id="ef-firstname" placeholder="e.g. Chidi" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Name *</label>
+              <input type="text" class="form-input" id="ef-lastname" placeholder="e.g. Okeke" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date of Birth *</label>
+              <input type="date" class="form-input" id="ef-dob" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Gender</label>
+              <select class="form-select" id="ef-gender">
+                <option value="">Select...</option>
+                <option>Male</option>
+                <option>Female</option>
+                <option>Prefer not to say</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone Number *</label>
+              <input type="tel" class="form-input" id="ef-phone" placeholder="+234 801 234 5678" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email Address</label>
+              <input type="email" class="form-input" id="ef-email" placeholder="member@company.com" />
+            </div>
+            <div class="form-group full">
+              <label class="form-label">Home Address</label>
+              <input type="text" class="form-input" id="ef-address" placeholder="12 Adeola Odeku Street, Victoria Island, Lagos" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Employer / Company</label>
+              <input type="text" class="form-input" id="ef-employer" placeholder="e.g. Dangote Industries" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Staff / Employee ID</label>
+              <input type="text" class="form-input" id="ef-staffid" placeholder="e.g. DAN-10441" />
+            </div>
+          </div>
+          <div class="enroll-nav">
+            <span style="font-size:12px;color:var(--text-muted);">Step 1 of 4 — Personal Information</span>
+            <button class="e-btn e-primary" onclick="enrollGoTo(2)">Next: Plan Selection →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STEP 2: Plan & Coverage ── -->
+      <div class="step-page" id="enroll-step-2">
+        <div class="enroll-card">
+          <h3>📋 Plan & Coverage</h3>
+          <div class="enroll-desc">Select the health plan, coverage type and preferred hospital for this member.</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Health Plan *</label>
+              <select class="form-select" id="ef-plan">
+                <option value="">Select plan...</option>
+                <option value="Bronze">Bronze — Basic ₦15,000/mo</option>
+                <option value="Silver">Silver — Standard ₦28,000/mo</option>
+                <option value="Gold">Gold — Enhanced ₦52,000/mo</option>
+                <option value="Platinum">Platinum — Comprehensive ₦95,000/mo</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Coverage Type</label>
+              <select class="form-select" id="ef-coverage">
+                <option value="">Select coverage...</option>
+                <option>Individual only</option>
+                <option>Individual + Spouse</option>
+                <option>Family (up to 4)</option>
+                <option>Family Extended (5+)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Number of Dependants</label>
+              <select class="form-select" id="ef-dependants">
+                <option value="0">0 — None</option>
+                <option value="1">1 dependant</option>
+                <option value="2">2 dependants</option>
+                <option value="3">3 dependants</option>
+                <option value="4">4 dependants</option>
+                <option value="5+">5 or more</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Preferred Hospital</label>
+              <select class="form-select" id="ef-hospital">
+                <option value="">Select hospital...</option>
+                <option>Lagos Island General Hospital</option>
+                <option>Reddington Hospital</option>
+                <option>St. Nicholas Hospital</option>
+                <option>Eko Hospital</option>
+                <option>LUTH (Lagos University Teaching Hospital)</option>
+                <option>Lagoon Hospital</option>
+                <option>Evercare Hospital</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Coverage Start Date *</label>
+              <input type="date" class="form-input" id="ef-startdate" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Payment Frequency</label>
+              <select class="form-select" id="ef-payment">
+                <option>Monthly</option>
+                <option>Quarterly</option>
+                <option>Annually (10% discount)</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <label class="form-label">Pre-existing Conditions (if any)</label>
+              <input type="text" class="form-input" id="ef-conditions" placeholder="e.g. Hypertension, Diabetes — leave blank if none" />
+            </div>
+          </div>
+          <div class="enroll-nav">
+            <button class="e-btn e-ghost" onclick="enrollGoTo(1)">← Back</button>
+            <button class="e-btn e-primary" onclick="enrollGoTo(3)">Next: Documents →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STEP 3: Documents ── -->
+      <div class="step-page" id="enroll-step-3">
+        <div class="enroll-card">
+          <h3>📂 Document Verification</h3>
+          <div class="enroll-desc">Tick each document as you physically verify and collect it from the member. All required items must be checked before proceeding.</div>
+
+          <div class="doc-list">
+            <div class="doc-item" id="doc-id" onclick="toggleDoc('doc-id')">
+              <div class="doc-box" id="docbox-id"></div>
+              <div>
+                <div class="doc-title">Valid Government-Issued ID <span style="color:var(--red);font-size:11px;">Required</span></div>
+                <div class="doc-sub">National ID card, International Passport, Voter's Card or Driver's Licence</div>
+              </div>
+            </div>
+            <div class="doc-item" id="doc-photo" onclick="toggleDoc('doc-photo')">
+              <div class="doc-box" id="docbox-photo"></div>
+              <div>
+                <div class="doc-title">Passport Photograph <span style="color:var(--red);font-size:11px;">Required</span></div>
+                <div class="doc-sub">Recent passport-size photo, white background (2 copies)</div>
+              </div>
+            </div>
+            <div class="doc-item" id="doc-letter" onclick="toggleDoc('doc-letter')">
+              <div class="doc-box" id="docbox-letter"></div>
+              <div>
+                <div class="doc-title">Employer Introduction Letter <span style="color:var(--red);font-size:11px;">Required</span></div>
+                <div class="doc-sub">Company letterhead confirming employment and eligibility for coverage</div>
+              </div>
+            </div>
+            <div class="doc-item" id="doc-form" onclick="toggleDoc('doc-form')">
+              <div class="doc-box" id="docbox-form"></div>
+              <div>
+                <div class="doc-title">Signed Enrollment Form <span style="color:var(--red);font-size:11px;">Required</span></div>
+                <div class="doc-sub">Completed MediCare HMO form with member signature and date</div>
+              </div>
+            </div>
+            <div class="doc-item" id="doc-medical" onclick="toggleDoc('doc-medical')">
+              <div class="doc-box" id="docbox-medical"></div>
+              <div>
+                <div class="doc-title">Medical History Form <span style="color:var(--text-muted);font-size:11px;">If applicable</span></div>
+                <div class="doc-sub">Required if member declared any pre-existing medical conditions</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:20px;">
+            <label class="form-label">Verification Officer Notes</label>
+            <input type="text" class="form-input" id="ef-docnotes" placeholder="e.g. Passport copy certified true. All originals verified." />
+          </div>
+
+          <div style="margin-top:16px; padding:12px 16px; background:var(--amber-bg); border:1px solid #fde68a; border-radius:8px; font-size:12px; color:#92400e;">
+            ⚠️ <strong>Note:</strong> At minimum the first 4 documents must be verified before proceeding to submission.
+          </div>
+
+          <div class="enroll-nav">
+            <button class="e-btn e-ghost" onclick="enrollGoTo(2)">← Back</button>
+            <button class="e-btn e-primary" onclick="enrollGoTo(4)">Next: Review & Submit →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STEP 4: Review & Submit ── -->
+      <div class="step-page" id="enroll-step-4">
+        <div class="enroll-card">
+          <h3>✅ Review & Confirm Enrollment</h3>
+          <div class="enroll-desc">Confirm all details before submitting. A Member ID will be generated automatically on submission.</div>
+
+          <div class="summary-grid" id="enroll-summary">
+            <!-- Populated by JS -->
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Enrollment Processed By *</label>
+            <input type="text" class="form-input" id="ef-officer" value="Adaeze Okonkwo" />
+          </div>
+
+          <div style="margin-top:16px; padding:12px 16px; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; font-size:12px; color:#92400e;">
+            ⚠️ By submitting you confirm that all documents have been verified and the information above is accurate. This action will be permanently recorded in the audit log.
+          </div>
+
+          <div class="enroll-nav">
+            <button class="e-btn e-ghost" onclick="enrollGoTo(3)">← Back</button>
+            <button class="e-btn e-success" id="enroll-submit-btn" onclick="submitEnrollment()">✓ Submit Enrollment</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- ══ END ENROLL ══ -->
   </div>
 </div>
 
@@ -779,6 +1140,8 @@
     providers: ["Provider Network",           "Operations › Providers"],
     analytics: ["Analytics Overview",         "Reports › Analytics"],
     audit:     ["Audit Log",                  "Reports › Audit Log"],
+    enroll:    ["Member Enrollment",           "Operations › Enroll Member"],
+    enroll:    ["Member Enrollment",           "Operations › Enroll Member"],
   };
 
   function showSection(name, el) {
@@ -812,6 +1175,177 @@
     el.textContent = msg;
     el.classList.add("show");
     setTimeout(() => el.classList.remove("show"), 2500);
+  }
+
+
+  // ══════════════════════════════════════════════════════
+  // ENROLLMENT WIZARD
+  // ══════════════════════════════════════════════════════
+  let enrollStep = 1;
+  const docChecked = {};
+
+  function enrollGoTo(step) {
+    // Validate step 1
+    if (step > 1 && enrollStep === 1) {
+      const fn = document.getElementById("ef-firstname").value.trim();
+      const ln = document.getElementById("ef-lastname").value.trim();
+      const ph = document.getElementById("ef-phone").value.trim();
+      if (!fn || !ln || !ph) { toast("⚠️ Please fill in First Name, Last Name and Phone Number"); return; }
+    }
+    // Validate step 2
+    if (step > 2 && enrollStep === 2) {
+      const plan = document.getElementById("ef-plan").value;
+      const sd   = document.getElementById("ef-startdate").value;
+      if (!plan) { toast("⚠️ Please select a health plan"); return; }
+      if (!sd)   { toast("⚠️ Please set a coverage start date"); return; }
+    }
+    // Update UI
+    document.getElementById("enroll-step-" + enrollStep).classList.remove("active");
+    enrollStep = step;
+    document.getElementById("enroll-step-" + enrollStep).classList.add("active");
+    updateWizardBar();
+    if (step === 4) populateReviewSummary();
+    // Scroll to top of content
+    document.querySelector(".content").scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function updateWizardBar() {
+    for (let i = 1; i <= 4; i++) {
+      const circle = document.getElementById("wz-c" + i);
+      circle.classList.remove("active", "done");
+      if (i < enrollStep)      circle.classList.add("done"), circle.textContent = "✓";
+      else if (i === enrollStep) circle.classList.add("active"), circle.textContent = i;
+      else                       circle.textContent = i;
+    }
+    for (let i = 1; i <= 3; i++) {
+      const line = document.getElementById("wz-l" + i);
+      line.classList.toggle("done", i < enrollStep);
+    }
+    // Update sidebar badge
+    const badge = document.getElementById("nav-enroll-step");
+    if (badge) badge.textContent = "Step " + enrollStep + "/4";
+  }
+
+  function toggleDoc(id) {
+    docChecked[id] = !docChecked[id];
+    const item = document.getElementById(id);
+    const box  = document.getElementById("docbox-" + id.replace("doc-", ""));
+    item.classList.toggle("checked", docChecked[id]);
+    box.textContent = docChecked[id] ? "✓" : "";
+  }
+
+  function populateReviewSummary() {
+    const v = (id) => document.getElementById(id)?.value?.trim() || "—";
+    const docs = ["id","photo","letter","form","medical"];
+    const checkedDocs = docs.filter(d => docChecked["doc-" + d]);
+
+    const planRaw = v("ef-plan");
+    const planName = planRaw.includes("Bronze") ? "Bronze" : planRaw.includes("Silver") ? "Silver" : planRaw.includes("Gold") ? "Gold" : planRaw.includes("Platinum") ? "Platinum" : planRaw || "—";
+
+    document.getElementById("enroll-summary").innerHTML = `
+      <div class="sum-box">
+        <h4>Personal Details</h4>
+        <div class="sum-row"><span class="sum-key">Full Name</span><span class="sum-val">${v("ef-firstname")} ${v("ef-lastname")}</span></div>
+        <div class="sum-row"><span class="sum-key">Date of Birth</span><span class="sum-val">${v("ef-dob") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Gender</span><span class="sum-val">${v("ef-gender") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Phone</span><span class="sum-val">${v("ef-phone")}</span></div>
+        <div class="sum-row"><span class="sum-key">Email</span><span class="sum-val">${v("ef-email") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Employer</span><span class="sum-val">${v("ef-employer") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Staff ID</span><span class="sum-val">${v("ef-staffid") || "—"}</span></div>
+      </div>
+      <div class="sum-box">
+        <h4>Plan & Coverage</h4>
+        <div class="sum-row"><span class="sum-key">Plan</span><span class="sum-val">${planName}</span></div>
+        <div class="sum-row"><span class="sum-key">Coverage Type</span><span class="sum-val">${v("ef-coverage") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Dependants</span><span class="sum-val">${v("ef-dependants")}</span></div>
+        <div class="sum-row"><span class="sum-key">Hospital</span><span class="sum-val">${v("ef-hospital") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Start Date</span><span class="sum-val">${v("ef-startdate") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Payment</span><span class="sum-val">${v("ef-payment")}</span></div>
+        <div class="sum-row"><span class="sum-key">Conditions</span><span class="sum-val">${v("ef-conditions") || "None"}</span></div>
+      </div>
+      <div class="sum-box">
+        <h4>Documents Verified</h4>
+        <div class="sum-row"><span class="sum-key">Gov ID</span><span class="sum-val" style="color:${docChecked['doc-id']?'var(--green)':'var(--red)'}">${docChecked['doc-id']?'✓ Verified':'✗ Missing'}</span></div>
+        <div class="sum-row"><span class="sum-key">Photograph</span><span class="sum-val" style="color:${docChecked['doc-photo']?'var(--green)':'var(--red)'}">${docChecked['doc-photo']?'✓ Verified':'✗ Missing'}</span></div>
+        <div class="sum-row"><span class="sum-key">Employer Letter</span><span class="sum-val" style="color:${docChecked['doc-letter']?'var(--green)':'var(--red)'}">${docChecked['doc-letter']?'✓ Verified':'✗ Missing'}</span></div>
+        <div class="sum-row"><span class="sum-key">Enrollment Form</span><span class="sum-val" style="color:${docChecked['doc-form']?'var(--green)':'var(--red)'}">${docChecked['doc-form']?'✓ Verified':'✗ Missing'}</span></div>
+        <div class="sum-row"><span class="sum-key">Medical Form</span><span class="sum-val" style="color:${docChecked['doc-medical']?'var(--green)':'var(--text-muted)'}">${docChecked['doc-medical']?'✓ Verified':'— N/A'}</span></div>
+      </div>
+      <div class="sum-box">
+        <h4>Notes</h4>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">${v("ef-docnotes") || "No notes added."}</div>
+      </div>
+    `;
+  }
+
+  function submitEnrollment() {
+    const fn = document.getElementById("ef-firstname").value.trim();
+    const ln = document.getElementById("ef-lastname").value.trim();
+    const officer = document.getElementById("ef-officer").value.trim() || "Unknown Officer";
+
+    const requiredDocs = ["doc-id","doc-photo","doc-letter","doc-form"];
+    const missingDocs  = requiredDocs.filter(d => !docChecked[d]);
+    if (missingDocs.length > 0) {
+      toast("⚠️ Please verify all 4 required documents first (Step 3)");
+      return;
+    }
+
+    const btn = document.getElementById("enroll-submit-btn");
+    btn.disabled = true;
+    btn.textContent = "Submitting...";
+
+    setTimeout(() => {
+      const memberId = "MED-" + String(Math.floor(100000 + Math.random() * 900000));
+      const planRaw  = document.getElementById("ef-plan").value;
+      const planName = planRaw.includes("Bronze") ? "Bronze" : planRaw.includes("Silver") ? "Silver" : planRaw.includes("Gold") ? "Gold" : planRaw.includes("Platinum") ? "Platinum" : "Standard";
+
+      // Log to audit
+      auditLog.unshift({
+        time: new Date().toLocaleTimeString("en-NG", {hour:"2-digit",minute:"2-digit"}),
+        action: "Enrolled",
+        requestId: memberId,
+        member: fn + " " + ln,
+        officer: officer
+      });
+      saveData();
+      renderAudit();
+
+      // Show success
+      document.getElementById("enroll-step-4").classList.remove("active");
+      document.getElementById("wz-bar").style.display = "none";
+      document.getElementById("success-desc").textContent =
+        fn + " " + ln + " has been enrolled on the " + planName + " plan. Their ID card will be issued within 24 hours.";
+      document.getElementById("success-member-id").textContent = memberId;
+      document.getElementById("enroll-success").classList.add("show");
+      toast("🎉 " + fn + " " + ln + " enrolled — " + memberId);
+      btn.disabled = false;
+      btn.textContent = "✓ Submit Enrollment";
+    }, 800);
+  }
+
+  function resetEnrollment() {
+    // Clear form
+    ["ef-firstname","ef-lastname","ef-dob","ef-phone","ef-email","ef-address",
+     "ef-employer","ef-staffid","ef-plan","ef-coverage","ef-hospital",
+     "ef-startdate","ef-conditions","ef-docnotes","ef-officer"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = id === "ef-officer" ? "Adaeze Okonkwo" : id === "ef-dependants" ? "0" : "";
+    });
+    // Reset docs
+    ["id","photo","letter","form","medical"].forEach(d => {
+      docChecked["doc-" + d] = false;
+      const item = document.getElementById("doc-" + d);
+      const box  = document.getElementById("docbox-" + d);
+      if (item) item.classList.remove("checked");
+      if (box)  box.textContent = "";
+    });
+    // Reset wizard
+    enrollStep = 1;
+    document.querySelectorAll(".step-page").forEach(p => p.classList.remove("active"));
+    document.getElementById("enroll-step-1").classList.add("active");
+    document.getElementById("wz-bar").style.display = "flex";
+    document.getElementById("enroll-success").classList.remove("show");
+    updateWizardBar();
   }
 
   // ── Boot ──────────────────────────────────────────────
