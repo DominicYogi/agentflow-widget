@@ -9,6 +9,7 @@
     blue:  { primary: "#0052cc", light: "#e8f0fe", accent: "#003d99" },
     green: { primary: "#27ae60", light: "#e8f5e9", accent: "#219150" },
     dark:  { primary: "#1a1a2e", light: "#f0f0f0", accent: "#16213e" },
+    red: { primary: "#9B1B1B", light: "#fdf0f0", accent: "#7a1515" }
   };
   const theme = THEMES[THEME] || THEMES.blue;
 
@@ -312,7 +313,7 @@
   const launcher = document.createElement("button");
   launcher.id   = "af-launcher";
   launcher.type = "button";
-  launcher.innerHTML = "🤖";
+  launcher.innerHTML = "<img src='https://dominicyogi.github.io/agentflow-widget/liontech.png' style='width:34px;height:34px;object-fit:contain;border-radius:50%;' alt='Logo' />";
   document.body.appendChild(launcher);
 
   const panel = document.createElement("div");
@@ -320,7 +321,7 @@
   panel.innerHTML = `
     <div id="af-header">
       <div class="af-hinfo">
-        <div class="af-title">🤖 LionTech Support</div>
+        <div class="af-title"><img src='https://dominicyogi.github.io/agentflow-widget/liontech.png' style='width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:5px;' alt='Logo' />LionTech Support</div>
         <div class="af-sub" id="af-client-name">Connecting...</div>
       </div>
       <div class="af-hright">
