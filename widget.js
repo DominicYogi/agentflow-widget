@@ -1233,7 +1233,13 @@
           setInputLocked(false);
         }
       } else if (response.type === "file_result") {
-        showFileResult(response.steps || [], response.reply, response.downloadables || []);
+        // Guard: if reply is a raw JSON string (LLM bug), unwrap it
+        let fileReply = response.reply || "Done.";
+        try {
+          const p = JSON.parse(fileReply);
+          if (p?.reply) fileReply = p.reply;
+        } catch {}
+        showFileResult(response.steps || [], fileReply, response.downloadables || []);
         setInputLocked(false);
       } else {
         addMsg("agent", response.reply || "Done.");
