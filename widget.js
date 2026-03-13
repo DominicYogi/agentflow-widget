@@ -276,6 +276,30 @@
     #af-mic:disabled { opacity: 0.4; cursor: not-allowed; }
     #af-mic.listening { background: #e53935; color: white; border-color: #e53935; animation: af-pulse 0.8s infinite; }
 
+    /* ── File steps card ── */
+    .af-file-steps {
+      align-self: flex-start; max-width: 94%;
+      background: white; border: 1px solid #e2e2e2;
+      border-radius: 12px; overflow: hidden;
+      font-size: 12.5px; border-bottom-left-radius: 4px;
+    }
+    .af-fsteps-header {
+      background: #f0f4ff; padding: 7px 12px;
+      font-size: 11px; font-weight: 700; color: ${theme.primary};
+      border-bottom: 1px solid #e2e2e2;
+    }
+    .af-fsteps-list { padding: 6px 4px; display: flex; flex-direction: column; gap: 2px; }
+    .af-fstep {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 5px 10px; border-radius: 6px;
+    }
+    .af-fstep:hover { background: #f7f8fa; }
+    .af-fstep-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+    .af-fstep-body { flex: 1; min-width: 0; }
+    .af-fstep-label { font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .af-fstep-preview { font-size: 11px; color: #888; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+
     #af-branding {
       text-align: center; font-size: 10px; color: #ccc;
       padding: 5px; background: white; border-top: 1px solid #f0f0f0; flex-shrink: 0;
@@ -827,6 +851,47 @@
   }
 
   // ── Confirm card ──────────────────────────────────────
+  // ── File result display ─────────────────────────────
+  // Shows step-by-step tool progress then final answer
+  function showFileResult(steps, finalReply) {
+    const msgs = document.getElementById("af-messages");
+
+    if (steps.length > 0) {
+      // Build steps card
+      const card = document.createElement("div");
+      card.className = "af-file-steps";
+
+      const stepsHtml = steps.map(s => {
+        const ok      = !s.result?.startsWith("Error:");
+        const icon    = ok ? "✅" : "❌";
+        const preview = s.result ? s.result.split("\n")[0].slice(0, 80) : "";
+        return `<div class="af-fstep">
+          <span class="af-fstep-icon">${icon}</span>
+          <div class="af-fstep-body">
+            <div class="af-fstep-label">${s.label}</div>
+            ${preview ? `<div class="af-fstep-preview">${escHtml(preview)}</div>` : ""}
+          </div>
+        </div>`;
+      }).join("");
+
+      card.innerHTML = `
+        <div class="af-fsteps-header">⚙️ ${steps.length} step${steps.length > 1 ? "s" : ""} completed</div>
+        <div class="af-fsteps-list">${stepsHtml}</div>`;
+      msgs.appendChild(card);
+    }
+
+    // Final answer bubble
+    if (finalReply?.trim()) {
+      addMsg("agent", finalReply);
+    }
+
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
   function showConfirmCard(reply, plan) {
     pendingPlan = plan;
     const card  = document.createElement("div");
@@ -920,6 +985,9 @@
           addMsg("agent", response.reply);
           setInputLocked(false);
         }
+      } else if (response.type === "file_result") {
+        showFileResult(response.steps || [], response.reply);
+        setInputLocked(false);
       } else {
         addMsg("agent", response.reply || "Done.");
         setInputLocked(false);
