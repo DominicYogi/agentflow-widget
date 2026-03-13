@@ -2,8 +2,8 @@
 
   // ── Config ────────────────────────────────────────────
   const BACKEND_URL = "https://agentflow-backend-krdb.onrender.com";
-  const API_KEY = document.currentScript?.getAttribute("data-api-key") || "af_live_medicare001";
-  const THEME = document.currentScript?.getAttribute("data-theme") || "blue";
+  const API_KEY  = document.currentScript?.getAttribute("data-api-key") || "af_live_medicare001";
+  const THEME    = document.currentScript?.getAttribute("data-theme")   || "blue";
 
   const THEMES = {
     blue:  { primary: "#0052cc", light: "#e8f0fe", accent: "#003d99" },
@@ -17,28 +17,26 @@
   let isProcessing        = false;
   let pendingPlan         = null;
   let conversationHistory = [];
+  let attachments         = [];   // [{ name, type, size, dataUrl, text }]
   const SESSION_KEY       = "af_conv_" + (API_KEY || "default");
 
   // ── Device fingerprint ────────────────────────────────
   const deviceInfo = (function () {
     const ua = navigator.userAgent;
     let os = "Unknown OS";
-    if (/Windows NT 10/.test(ua))      os = "Windows 10/11";
-    else if (/Windows NT 6/.test(ua))  os = "Windows 7/8";
-    else if (/Mac OS X/.test(ua))      os = "macOS";
-    else if (/Linux/.test(ua))         os = "Linux";
-    else if (/Android/.test(ua))       os = "Android";
-    else if (/iPhone|iPad/.test(ua))   os = "iOS";
-
+    if (/Windows NT 10/.test(ua))     os = "Windows 10/11";
+    else if (/Windows NT 6/.test(ua)) os = "Windows 7/8";
+    else if (/Mac OS X/.test(ua))     os = "macOS";
+    else if (/Linux/.test(ua))        os = "Linux";
+    else if (/Android/.test(ua))      os = "Android";
+    else if (/iPhone|iPad/.test(ua))  os = "iOS";
     let browser = "Unknown Browser";
-    if (/Edg\//.test(ua))             browser = "Microsoft Edge";
-    else if (/Chrome\//.test(ua))     browser = "Chrome";
-    else if (/Firefox\//.test(ua))    browser = "Firefox";
-    else if (/Safari\//.test(ua))     browser = "Safari";
-
+    if (/Edg\//.test(ua))            browser = "Microsoft Edge";
+    else if (/Chrome\//.test(ua))    browser = "Chrome";
+    else if (/Firefox\//.test(ua))   browser = "Firefox";
+    else if (/Safari\//.test(ua))    browser = "Safari";
     return {
-      os:        os,
-      browser:   browser,
+      os, browser,
       screenRes: screen.width + "x" + screen.height,
       timezone:  Intl.DateTimeFormat().resolvedOptions().timeZone,
       language:  navigator.language || "en",
@@ -46,18 +44,17 @@
     };
   }());
 
-  // ── Operator name detection ───────────────────────────
+  // ── Operator detection ────────────────────────────────
   function detectOperator() {
     var selectors = [
-      ".user-name", "#user-name", ".username", "#username",
-      ".user-card .user-name", ".sidebar-footer .user-name",
-      "[data-username]", "[data-user]",
-      ".nav-user", ".header-user", ".profile-name",
-      ".operator-name", ".staff-name", ".agent-name",
-      ".avatar-name", ".display-name", ".full-name",
-      ".topbar .name", "header .name"
+      ".user-name","#user-name",".username","#username",
+      ".user-card .user-name",".sidebar-footer .user-name",
+      "[data-username]","[data-user]",
+      ".nav-user",".header-user",".profile-name",
+      ".operator-name",".staff-name",".agent-name",
+      ".avatar-name",".display-name",".full-name",
+      ".topbar .name","header .name"
     ];
-
     for (var i = 0; i < selectors.length; i++) {
       try {
         var el = document.querySelector(selectors[i]);
@@ -67,206 +64,341 @@
         }
       } catch (e) {}
     }
-
-    // Fallback: look for First Last pattern in user-card/profile/topbar
     var namePattern = /^[A-Z][a-z]+ [A-Z][a-z]+$/;
-    var candidates = document.querySelectorAll(".user-card *, .profile *, .topbar *");
+    var candidates  = document.querySelectorAll(".user-card *, .profile *, .topbar *");
     for (var j = 0; j < candidates.length; j++) {
       var t = (candidates[j].textContent || "").trim();
       if (namePattern.test(t)) return t;
     }
-
     return null;
   }
 
   // ── Styles ────────────────────────────────────────────
   const style = document.createElement("style");
-  style.textContent = [
-    "* { box-sizing: border-box; }",
-    "#af-launcher {",
-    "  position: fixed; bottom: 30px; right: 30px;",
-    "  width: 58px; height: 58px;",
-    "  background: " + theme.primary + ";",
-    "  border-radius: 50%;",
-    "  display: flex; align-items: center; justify-content: center;",
-    "  cursor: pointer;",
-    "  box-shadow: 0 4px 24px " + theme.primary + "55;",
-    "  z-index: 9999; transition: transform 0.2s, box-shadow 0.2s;",
-    "  font-size: 26px; border: none;",
-    "}",
-    "#af-launcher:hover { transform: scale(1.08); box-shadow: 0 6px 28px " + theme.primary + "77; }",
-    "#af-panel {",
-    "  position: fixed; bottom: 106px; right: 30px; top: 16px;",
-    "  width: 400px; background: #fff; border-radius: 18px;",
-    "  box-shadow: 0 12px 56px rgba(0,0,0,0.16); z-index: 9998;",
-    "  display: none; flex-direction: column; overflow: hidden;",
-    "  border: 1px solid #e0e0e0;",
-    "  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;",
-    "  animation: af-up 0.22s ease; max-height: calc(100vh - 130px);",
-    "}",
-    "@keyframes af-up { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }",
-    "#af-panel.open { display: flex; }",
-    "#af-header { background: " + theme.primary + "; color: white; padding: 14px 16px;",
-    "  display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }",
-    ".af-hinfo .af-title { font-size: 14px; font-weight: 700; }",
-    ".af-hinfo .af-sub   { font-size: 11px; opacity: 0.72; margin-top: 2px; }",
-    ".af-hright { display: flex; align-items: center; gap: 10px; }",
-    ".af-dot { width: 7px; height: 7px; border-radius: 50%; background: #00FF88; animation: af-pulse 2s infinite; }",
-    "@keyframes af-pulse { 0%,100%{opacity:1}50%{opacity:0.35} }",
-    "#af-close { cursor:pointer; font-size:18px; opacity:0.75; }",
-    "#af-close:hover { opacity:1; }",
-    "#af-usage { background: " + theme.light + "; padding: 7px 16px; font-size: 11px; color: " + theme.primary + ";",
-    "  display: flex; justify-content: space-between; align-items: center;",
-    "  border-bottom: 1px solid #e4e4e4; flex-shrink: 0; }",
-    ".af-bar { width: 100px; height: 4px; background: #ddd; border-radius: 2px; }",
-    ".af-bar-fill { height:100%; background: " + theme.primary + "; border-radius:2px; transition: width 0.5s; }",
-    "#af-messages { flex: 1; padding: 14px 14px 6px; overflow-y: auto; background: #f7f8fa;",
-    "  display: flex; flex-direction: column; gap: 10px; min-height: 200px; }",
-    ".af-msg { max-width: 86%; padding: 10px 14px; border-radius: 14px; font-size: 13px;",
-    "  line-height: 1.55; word-break: break-word; }",
-    ".af-msg.user { background: " + theme.primary + "; color: white;",
-    "  align-self: flex-end; border-bottom-right-radius: 4px; }",
-    ".af-msg.agent { background: white; color: #222; align-self: flex-start;",
-    "  border: 1px solid #e2e2e2; border-bottom-left-radius: 4px; }",
-    ".af-msg.thinking { background: white; color: #aaa; font-style: italic;",
-    "  border: 1px dashed #ddd; align-self: flex-start; }",
-    ".af-msg.success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9;",
-    "  align-self: flex-start; border-bottom-left-radius: 4px; font-size: 12.5px; }",
-    ".af-msg.error { background: #fdecea; color: #c62828; border: 1px solid #ffcdd2;",
-    "  align-self: flex-start; border-bottom-left-radius: 4px; font-size: 12.5px; }",
-    ".af-msg.warning { background: #fff8e1; color: #e65100; border: 1px solid #ffe082;",
-    "  align-self: flex-start; border-bottom-left-radius: 4px; font-size: 12.5px; }",
-    ".af-confirm-card { background: white; border: 1.5px solid " + theme.primary + "44;",
-    "  border-radius: 12px; padding: 14px 16px; align-self: flex-start; max-width: 90%;",
-    "  box-shadow: 0 2px 12px rgba(0,0,0,0.07); }",
-    ".af-confirm-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px;",
-    "  color: " + theme.primary + "; text-transform: uppercase; margin-bottom: 6px; }",
-    ".af-confirm-text { font-size: 13px; color: #333; line-height: 1.5; margin-bottom: 12px; }",
-    ".af-confirm-btns { display: flex; gap: 8px; }",
-    ".af-confirm-btns button { flex: 1; padding: 9px 0; border: none; border-radius: 8px;",
-    "  font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.18s; }",
-    ".af-btn-yes { background: " + theme.primary + "; color: white; }",
-    ".af-btn-no  { background: #f0f0f0; color: #555; }",
-    ".af-confirm-btns button:hover { opacity: 0.85; }",
-    ".af-confirm-btns button:disabled { opacity: 0.5; cursor: not-allowed; }",
-    "#af-chips { padding: 6px 14px 10px; background: #f7f8fa;",
-    "  display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }",
-    ".af-chip { background: white; border: 1px solid #ddd; border-radius: 16px;",
-    "  padding: 5px 12px; font-size: 11px; cursor: pointer; color: " + theme.primary + "; transition: all 0.18s; }",
-    ".af-chip:hover { background: " + theme.primary + "; color: white; border-color: " + theme.primary + "; }",
-    "#af-input-area { padding: 10px 12px; border-top: 1px solid #e6e6e6;",
-    "  display: flex; gap: 7px; background: white; flex-shrink: 0; }",
-    "#af-input { flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 24px;",
-    "  font-size: 13px; outline: none; font-family: inherit; transition: border-color 0.18s; }",
-    "#af-input:focus { border-color: " + theme.primary + "; }",
-    "#af-input:disabled { background: #f5f5f5; color: #aaa; }",
-    "#af-send, #af-mic { width: 38px; height: 38px; border-radius: 50%; border: none;",
-    "  cursor: pointer; font-size: 16px; display: flex; align-items: center;",
-    "  justify-content: center; transition: all 0.18s; flex-shrink: 0; }",
-    "#af-send { background: " + theme.primary + "; color: white; }",
-    "#af-send:hover { background: " + theme.accent + "; }",
-    "#af-send:disabled { background: #ccc; cursor: not-allowed; }",
-    "#af-mic { background: white; color: #666; border: 1.5px solid #ddd; }",
-    "#af-mic:hover { border-color: " + theme.primary + "; color: " + theme.primary + "; }",
-    "#af-mic:disabled { opacity: 0.4; cursor: not-allowed; }",
-    "#af-mic.listening { background: #e53935; color: white; border-color: #e53935; animation: af-pulse 0.8s infinite; }",
-    "#af-branding { text-align: center; font-size: 10px; color: #ccc;",
-    "  padding: 5px; background: white; border-top: 1px solid #f0f0f0; flex-shrink: 0; }",
-    "#af-branding a { color: " + theme.primary + "; text-decoration: none; font-weight: 700; }"
-  ].join("\n");
+  style.textContent = `
+    * { box-sizing: border-box; }
+
+    #af-launcher {
+      position: fixed; bottom: 30px; right: 30px;
+      width: 58px; height: 58px;
+      background: ${theme.primary};
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 24px ${theme.primary}55;
+      z-index: 9999; transition: transform 0.2s, box-shadow 0.2s;
+      font-size: 26px; border: none;
+    }
+    #af-launcher:hover { transform: scale(1.08); box-shadow: 0 6px 28px ${theme.primary}77; }
+
+    #af-panel {
+      position: fixed; bottom: 106px; right: 30px; top: 16px;
+      width: 420px; background: #fff; border-radius: 18px;
+      box-shadow: 0 12px 56px rgba(0,0,0,0.16); z-index: 9998;
+      display: none; flex-direction: column; overflow: hidden;
+      border: 1px solid #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      animation: af-up 0.22s ease; max-height: calc(100vh - 130px);
+    }
+    @keyframes af-up { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+    #af-panel.open { display: flex; }
+
+    #af-header {
+      background: ${theme.primary}; color: white; padding: 14px 16px;
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    .af-hinfo .af-title { font-size: 14px; font-weight: 700; }
+    .af-hinfo .af-sub   { font-size: 11px; opacity: 0.72; margin-top: 2px; }
+    .af-hright { display: flex; align-items: center; gap: 10px; }
+    .af-dot { width: 7px; height: 7px; border-radius: 50%; background: #00FF88; animation: af-pulse 2s infinite; }
+    @keyframes af-pulse { 0%,100%{opacity:1}50%{opacity:0.35} }
+    #af-close { cursor:pointer; font-size:18px; opacity:0.75; }
+    #af-close:hover { opacity:1; }
+
+    #af-usage {
+      background: ${theme.light}; padding: 7px 16px; font-size: 11px; color: ${theme.primary};
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid #e4e4e4; flex-shrink: 0;
+    }
+    .af-bar { width: 100px; height: 4px; background: #ddd; border-radius: 2px; }
+    .af-bar-fill { height:100%; background: ${theme.primary}; border-radius:2px; transition: width 0.5s; }
+
+    #af-messages {
+      flex: 1; padding: 14px 14px 6px; overflow-y: auto; background: #f7f8fa;
+      display: flex; flex-direction: column; gap: 10px; min-height: 200px;
+    }
+    .af-msg {
+      max-width: 86%; padding: 10px 14px; border-radius: 14px; font-size: 13px;
+      line-height: 1.55; word-break: break-word;
+    }
+    .af-msg.user    { background: ${theme.primary}; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .af-msg.agent   { background: white; color: #222; align-self: flex-start; border: 1px solid #e2e2e2; border-bottom-left-radius: 4px; }
+    .af-msg.thinking{ background: white; color: #aaa; font-style: italic; border: 1px dashed #ddd; align-self: flex-start; }
+    .af-msg.success { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; align-self: flex-start; border-bottom-left-radius: 4px; font-size: 12.5px; }
+    .af-msg.error   { background: #fdecea; color: #c62828; border: 1px solid #ffcdd2; align-self: flex-start; border-bottom-left-radius: 4px; font-size: 12.5px; }
+    .af-msg.warning { background: #fff8e1; color: #e65100; border: 1px solid #ffe082; align-self: flex-start; border-bottom-left-radius: 4px; font-size: 12.5px; }
+
+    /* ── Attachment preview inside messages ── */
+    .af-msg-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .af-att-thumb {
+      position: relative; border-radius: 8px; overflow: hidden;
+      width: 80px; height: 80px; background: #f0f0f0;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .af-att-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .af-att-file {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px; padding: 8px; text-align: center; width: 100%; height: 100%;
+    }
+    .af-att-file .af-att-icon { font-size: 22px; }
+    .af-att-file .af-att-name {
+      font-size: 9px; word-break: break-all; overflow: hidden;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      color: #555; line-height: 1.3;
+    }
+
+    /* ── Confirm card ── */
+    .af-confirm-card {
+      background: white; border: 1.5px solid ${theme.primary}44;
+      border-radius: 12px; padding: 14px 16px; align-self: flex-start; max-width: 90%;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .af-confirm-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: ${theme.primary}; text-transform: uppercase; margin-bottom: 6px; }
+    .af-confirm-text  { font-size: 13px; color: #333; line-height: 1.5; margin-bottom: 12px; }
+    .af-confirm-btns  { display: flex; gap: 8px; }
+    .af-confirm-btns button { flex: 1; padding: 9px 0; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.18s; }
+    .af-btn-yes { background: ${theme.primary}; color: white; }
+    .af-btn-no  { background: #f0f0f0; color: #555; }
+    .af-confirm-btns button:hover { opacity: 0.85; }
+    .af-confirm-btns button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #af-chips {
+      padding: 6px 14px 10px; background: #f7f8fa;
+      display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
+    }
+    .af-chip {
+      background: white; border: 1px solid #ddd; border-radius: 16px;
+      padding: 5px 12px; font-size: 11px; cursor: pointer; color: ${theme.primary}; transition: all 0.18s;
+    }
+    .af-chip:hover { background: ${theme.primary}; color: white; border-color: ${theme.primary}; }
+
+    /* ── Attachment staging area (above input) ── */
+    #af-attachment-tray {
+      display: none; padding: 8px 12px 4px;
+      background: white; border-top: 1px solid #f0f0f0;
+      flex-wrap: wrap; gap: 8px; flex-shrink: 0;
+    }
+    #af-attachment-tray.has-items { display: flex; }
+    .af-staged {
+      position: relative; width: 60px; height: 60px;
+      border-radius: 8px; overflow: hidden; border: 1.5px solid #e0e0e0;
+      background: #f7f8fa;
+    }
+    .af-staged img { width: 100%; height: 100%; object-fit: cover; }
+    .af-staged-file {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; gap: 2px; padding: 6px;
+    }
+    .af-staged-file .af-si { font-size: 18px; }
+    .af-staged-file .af-sn { font-size: 8px; color: #666; text-align: center; word-break: break-all; overflow: hidden; max-height: 24px; }
+    .af-staged-remove {
+      position: absolute; top: 2px; right: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: rgba(0,0,0,0.55); color: white;
+      border: none; cursor: pointer; font-size: 9px;
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+
+    /* ── Voice preview bar ── */
+    #af-voice-preview {
+      display: none; align-items: center; gap: 8px;
+      padding: 8px 12px; background: #f0f7ff;
+      border-top: 1px solid #d0e4ff; flex-shrink: 0;
+    }
+    #af-voice-preview.visible { display: flex; }
+    #af-voice-preview .vp-icon { font-size: 16px; flex-shrink: 0; }
+    #af-voice-preview .vp-label { font-size: 11px; color: #0052cc; font-weight: 600; flex-shrink: 0; }
+    #af-voice-preview input {
+      flex: 1; border: 1.5px solid #b3d4ff; border-radius: 8px;
+      padding: 6px 10px; font-size: 12px; outline: none;
+      font-family: inherit; background: white; color: #333;
+    }
+    #af-voice-preview input:focus { border-color: ${theme.primary}; }
+    #af-vp-send {
+      padding: 6px 12px; background: ${theme.primary}; color: white;
+      border: none; border-radius: 8px; font-size: 12px; font-weight: 600;
+      cursor: pointer; flex-shrink: 0;
+    }
+    #af-vp-send:hover { background: ${theme.accent}; }
+    #af-vp-discard {
+      padding: 6px 10px; background: none; color: #999;
+      border: 1px solid #ddd; border-radius: 8px; font-size: 12px;
+      cursor: pointer; flex-shrink: 0;
+    }
+    #af-vp-discard:hover { color: #e53935; border-color: #e53935; }
+
+    /* ── Recording indicator ── */
+    #af-recording-bar {
+      display: none; align-items: center; justify-content: center; gap: 8px;
+      padding: 6px 12px; background: #fff0f0;
+      border-top: 1px solid #ffcdd2; font-size: 12px; color: #c62828;
+      flex-shrink: 0;
+    }
+    #af-recording-bar.visible { display: flex; }
+    .af-rec-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #e53935;
+      animation: af-pulse 0.8s infinite;
+    }
+    #af-rec-timer { font-family: monospace; font-size: 12px; font-weight: 700; }
+
+    /* ── Input area ── */
+    #af-input-area {
+      padding: 10px 12px; border-top: 1px solid #e6e6e6;
+      display: flex; gap: 7px; background: white; flex-shrink: 0; align-items: center;
+    }
+    #af-attach-btn {
+      width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid #ddd;
+      background: white; cursor: pointer; font-size: 15px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.18s; flex-shrink: 0; color: #666;
+    }
+    #af-attach-btn:hover { border-color: ${theme.primary}; color: ${theme.primary}; }
+    #af-attach-btn.has-files { border-color: ${theme.primary}; background: ${theme.light}; color: ${theme.primary}; }
+    #af-file-input { display: none; }
+    #af-input {
+      flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 24px;
+      font-size: 13px; outline: none; font-family: inherit; transition: border-color 0.18s;
+    }
+    #af-input:focus { border-color: ${theme.primary}; }
+    #af-input:disabled { background: #f5f5f5; color: #aaa; }
+    #af-send, #af-mic {
+      width: 38px; height: 38px; border-radius: 50%; border: none;
+      cursor: pointer; font-size: 16px; display: flex; align-items: center;
+      justify-content: center; transition: all 0.18s; flex-shrink: 0;
+    }
+    #af-send { background: ${theme.primary}; color: white; }
+    #af-send:hover { background: ${theme.accent}; }
+    #af-send:disabled { background: #ccc; cursor: not-allowed; }
+    #af-mic { background: white; color: #666; border: 1.5px solid #ddd; }
+    #af-mic:hover { border-color: ${theme.primary}; color: ${theme.primary}; }
+    #af-mic:disabled { opacity: 0.4; cursor: not-allowed; }
+    #af-mic.listening { background: #e53935; color: white; border-color: #e53935; animation: af-pulse 0.8s infinite; }
+
+    #af-branding {
+      text-align: center; font-size: 10px; color: #ccc;
+      padding: 5px; background: white; border-top: 1px solid #f0f0f0; flex-shrink: 0;
+    }
+    #af-branding a { color: ${theme.primary}; text-decoration: none; font-weight: 700; }
+  `;
   document.head.appendChild(style);
 
   // ── Build HTML ────────────────────────────────────────
   const launcher = document.createElement("button");
-  launcher.id = "af-launcher";
+  launcher.id   = "af-launcher";
   launcher.type = "button";
   launcher.innerHTML = "🤖";
   document.body.appendChild(launcher);
 
   const panel = document.createElement("div");
   panel.id = "af-panel";
-  panel.innerHTML =
-    '<div id="af-header">' +
-      '<div class="af-hinfo">' +
-        '<div class="af-title">🤖 AgentFlow AI</div>' +
-        '<div class="af-sub" id="af-client-name">Connecting...</div>' +
-      '</div>' +
-      '<div class="af-hright">' +
-        '<div style="display:flex;align-items:center;gap:5px;font-size:11px;">' +
-          '<div class="af-dot"></div><span>Live</span>' +
-        '</div>' +
-        '<span id="af-close">✕</span>' +
-      '</div>' +
-    '</div>' +
-    '<div id="af-usage">' +
-      '<span id="af-usage-text">Loading...</span>' +
-      '<div class="af-bar"><div class="af-bar-fill" id="af-bar-fill" style="width:0%"></div></div>' +
-    '</div>' +
-    '<div id="af-messages">' +
-      '<div class="af-msg thinking">Connecting to your AI agent...</div>' +
-    '</div>' +
-    '<div id="af-chips"></div>' +
-    '<div id="af-input-area">' +
-      '<input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />' +
-      '<button id="af-mic" type="button" title="Click to speak" disabled>🎤</button>' +
-      '<button id="af-send" type="button" disabled>➤</button>' +
-    '</div>' +
-    '<div id="af-branding">Powered by <a href="#">AgentFlow</a></div>';
+  panel.innerHTML = `
+    <div id="af-header">
+      <div class="af-hinfo">
+        <div class="af-title">🤖 AgentFlow AI</div>
+        <div class="af-sub" id="af-client-name">Connecting...</div>
+      </div>
+      <div class="af-hright">
+        <div style="display:flex;align-items:center;gap:5px;font-size:11px;">
+          <div class="af-dot"></div><span>Live</span>
+        </div>
+        <span id="af-close">✕</span>
+      </div>
+    </div>
+    <div id="af-usage">
+      <span id="af-usage-text">Loading...</span>
+      <div class="af-bar"><div class="af-bar-fill" id="af-bar-fill" style="width:0%"></div></div>
+    </div>
+    <div id="af-messages">
+      <div class="af-msg thinking">Connecting to your AI agent...</div>
+    </div>
+    <div id="af-chips"></div>
+
+    <!-- Staged attachments tray -->
+    <div id="af-attachment-tray"></div>
+
+    <!-- Voice note preview bar (shown after recording stops) -->
+    <div id="af-voice-preview">
+      <span class="vp-icon">🎤</span>
+      <span class="vp-label">Voice:</span>
+      <input id="af-vp-text" type="text" placeholder="Edit your message..." />
+      <button id="af-vp-send">Send</button>
+      <button id="af-vp-discard">✕</button>
+    </div>
+
+    <!-- Recording indicator -->
+    <div id="af-recording-bar">
+      <div class="af-rec-dot"></div>
+      <span>Recording</span>
+      <span id="af-rec-timer">0:00</span>
+      <span style="font-size:11px;color:#999;margin-left:4px;">Click mic to stop</span>
+    </div>
+
+    <div id="af-input-area">
+      <button id="af-attach-btn" type="button" title="Attach file or image">📎</button>
+      <input id="af-file-input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls" />
+      <input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />
+      <button id="af-mic" type="button" title="Click to record voice" disabled>🎤</button>
+      <button id="af-send" type="button" disabled>➤</button>
+    </div>
+    <div id="af-branding">Powered by <a href="#">AgentFlow</a></div>
+  `;
   document.body.appendChild(panel);
 
   // ── Panel toggle ──────────────────────────────────────
-  launcher.addEventListener("click", function () { panel.classList.toggle("open"); });
-  document.getElementById("af-close").addEventListener("click", function () { panel.classList.remove("open"); });
+  launcher.addEventListener("click", () => panel.classList.toggle("open"));
+  document.getElementById("af-close").addEventListener("click", () => panel.classList.remove("open"));
 
-  // ── Session storage helpers ───────────────────────────
+  // ── Session helpers ───────────────────────────────────
   function saveSession() {
     try {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify({
-        history: conversationHistory.slice(-40),
-        clientInfo: clientInfo
+        history: conversationHistory.slice(-40), clientInfo
       }));
     } catch (e) {}
   }
-
   function loadSession() {
-    try {
-      var raw = sessionStorage.getItem(SESSION_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (e) { return null; }
+    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; }
   }
-
   function clearSession() {
-    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
     conversationHistory = [];
   }
 
   // ── Message helpers ───────────────────────────────────
-  function addMsg(type, html, persist) {
-    if (persist === undefined) persist = true;
-    var msgs = document.getElementById("af-messages");
-    var el = document.createElement("div");
+  function addMsg(type, html, persist = true) {
+    const msgs = document.getElementById("af-messages");
+    const el   = document.createElement("div");
     el.className = "af-msg " + type;
     el.innerHTML = html;
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
     if (persist && type !== "thinking") {
-      conversationHistory.push({ type: type, html: html, time: Date.now() });
+      conversationHistory.push({ type, html, time: Date.now() });
       saveSession();
     }
     return el;
   }
 
-  function clearMessages() {
-    document.getElementById("af-messages").innerHTML = "";
-  }
+  function clearMessages() { document.getElementById("af-messages").innerHTML = ""; }
 
   function restoreMessages() {
-    if (conversationHistory.length === 0) return false;
+    if (!conversationHistory.length) return false;
     clearMessages();
-    var msgs = document.getElementById("af-messages");
-    conversationHistory.slice(-20).forEach(function (m) {
-      var el = document.createElement("div");
+    const msgs = document.getElementById("af-messages");
+    conversationHistory.slice(-20).forEach(m => {
+      const el = document.createElement("div");
       el.className = "af-msg " + m.type;
       el.innerHTML = m.html;
       msgs.appendChild(el);
@@ -276,47 +408,267 @@
   }
 
   function updateUsage(used, limit) {
-    var pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+    const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
     document.getElementById("af-usage-text").textContent = used + " / " + limit + " tasks used";
-    document.getElementById("af-bar-fill").style.width = pct + "%";
+    document.getElementById("af-bar-fill").style.width   = pct + "%";
   }
 
-  // ── Voice recognition ─────────────────────────────────
-  var micBtn = document.getElementById("af-mic");
-  var recognition = null;
+  // ════════════════════════════════════════════════════════
+  // ── FILE ATTACHMENT SYSTEM ────────────────────────────
+  // ════════════════════════════════════════════════════════
+
+  const fileInput  = document.getElementById("af-file-input");
+  const attachBtn  = document.getElementById("af-attach-btn");
+  const tray       = document.getElementById("af-attachment-tray");
+
+  const FILE_ICONS = {
+    pdf: "📄", doc: "📝", docx: "📝", txt: "📋",
+    csv: "📊", xlsx: "📊", xls: "📊", default: "📁"
+  };
+
+  function getFileIcon(name) {
+    const ext = name.split(".").pop().toLowerCase();
+    return FILE_ICONS[ext] || FILE_ICONS.default;
+  }
+
+  // Render the staging tray
+  function renderTray() {
+    tray.innerHTML = "";
+    if (attachments.length === 0) {
+      tray.classList.remove("has-items");
+      attachBtn.classList.remove("has-files");
+      return;
+    }
+    tray.classList.add("has-items");
+    attachBtn.classList.add("has-files");
+
+    attachments.forEach((att, idx) => {
+      const div = document.createElement("div");
+      div.className = "af-staged";
+
+      if (att.type.startsWith("image/")) {
+        div.innerHTML = `<img src="${att.dataUrl}" alt="${att.name}" />`;
+      } else {
+        div.innerHTML = `
+          <div class="af-staged-file">
+            <span class="af-si">${getFileIcon(att.name)}</span>
+            <span class="af-sn">${att.name}</span>
+          </div>`;
+      }
+
+      const rmBtn = document.createElement("button");
+      rmBtn.className   = "af-staged-remove";
+      rmBtn.textContent = "×";
+      rmBtn.title       = "Remove";
+      rmBtn.addEventListener("click", () => {
+        attachments.splice(idx, 1);
+        renderTray();
+      });
+      div.appendChild(rmBtn);
+      tray.appendChild(div);
+    });
+  }
+
+  attachBtn.addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", async () => {
+    const files = Array.from(fileInput.files);
+    for (const file of files) {
+      if (file.size > 10 * 1024 * 1024) {
+        addMsg("warning", `⚠️ "${file.name}" is over 10 MB and was skipped.`);
+        continue;
+      }
+      const att = await readFile(file);
+      attachments.push(att);
+    }
+    renderTray();
+    fileInput.value = "";
+  });
+
+  // Read file into base64 + extract text where possible
+  function readFile(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        let text = null;
+
+        // For plain text / CSV, extract readable content to send to AI
+        if (file.type === "text/plain" || file.type === "text/csv" || file.name.endsWith(".csv")) {
+          text = atob(dataUrl.split(",")[1]);
+          if (text.length > 4000) text = text.slice(0, 4000) + "\n...[truncated]";
+        }
+
+        resolve({
+          name:    file.name,
+          type:    file.type || "application/octet-stream",
+          size:    file.size,
+          dataUrl, // base64 data URL
+          text     // plain text content (null for binary files)
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Build the attachment context string to inject into the AI message
+  function buildAttachmentContext(atts) {
+    if (!atts || atts.length === 0) return "";
+    let ctx = "\n\n[ATTACHED FILES]\n";
+    atts.forEach((att, i) => {
+      ctx += `File ${i+1}: "${att.name}" (${att.type}, ${(att.size/1024).toFixed(1)} KB)\n`;
+      if (att.text) ctx += `Content:\n${att.text}\n`;
+      else if (att.type.startsWith("image/")) ctx += `[Image file — analyze visually if possible]\n`;
+      else ctx += `[Binary file — name and type provided for context]\n`;
+    });
+    return ctx;
+  }
+
+  // Render attachment thumbnails inside a chat bubble
+  function renderAttachmentThumbs(atts) {
+    if (!atts || atts.length === 0) return "";
+    const thumbs = atts.map(att => {
+      if (att.type.startsWith("image/")) {
+        return `<div class="af-att-thumb"><img src="${att.dataUrl}" alt="${att.name}" /></div>`;
+      }
+      return `
+        <div class="af-att-thumb">
+          <div class="af-att-file">
+            <span class="af-att-icon">${getFileIcon(att.name)}</span>
+            <span class="af-att-name">${att.name}</span>
+          </div>
+        </div>`;
+    }).join("");
+    return `<div class="af-msg-attachments">${thumbs}</div>`;
+  }
+
+  // ════════════════════════════════════════════════════════
+  // ── VOICE NOTE WITH PREVIEW ───────────────────────────
+  // ════════════════════════════════════════════════════════
+
+  const micBtn       = document.getElementById("af-mic");
+  const voicePreview = document.getElementById("af-voice-preview");
+  const vpText       = document.getElementById("af-vp-text");
+  const vpSend       = document.getElementById("af-vp-send");
+  const vpDiscard    = document.getElementById("af-vp-discard");
+  const recordingBar = document.getElementById("af-recording-bar");
+  const recTimer     = document.getElementById("af-rec-timer");
+
+  let recognition    = null;
+  let isRecording    = false;
+  let recInterval    = null;
+  let recSeconds     = 0;
+  let voiceTranscript = "";
+
+  // Show voice preview bar with transcript for editing
+  function showVoicePreview(text) {
+    vpText.value = text;
+    voicePreview.classList.add("visible");
+    vpText.focus();
+    vpText.select();
+  }
+
+  function hideVoicePreview() {
+    voicePreview.classList.remove("visible");
+    vpText.value = "";
+    voiceTranscript = "";
+  }
+
+  function startRecordingUI() {
+    isRecording = true;
+    recSeconds  = 0;
+    micBtn.classList.add("listening");
+    recordingBar.classList.add("visible");
+    hideVoicePreview();
+    recTimer.textContent = "0:00";
+    recInterval = setInterval(() => {
+      recSeconds++;
+      const m = Math.floor(recSeconds / 60);
+      const s = recSeconds % 60;
+      recTimer.textContent = m + ":" + (s < 10 ? "0" : "") + s;
+    }, 1000);
+  }
+
+  function stopRecordingUI() {
+    isRecording = false;
+    micBtn.classList.remove("listening");
+    recordingBar.classList.remove("visible");
+    clearInterval(recInterval);
+  }
 
   if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SR();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
-    recognition.onstart  = function () { micBtn.classList.add("listening"); document.getElementById("af-input").placeholder = "Listening..."; };
-    recognition.onend    = function () { micBtn.classList.remove("listening"); document.getElementById("af-input").placeholder = "Ask me anything or give me a task..."; };
-    recognition.onerror  = function () { micBtn.classList.remove("listening"); document.getElementById("af-input").placeholder = "Ask me anything or give me a task..."; };
-    recognition.onresult = function (e) { document.getElementById("af-input").value = e.results[0][0].transcript; handleSend(); };
-    micBtn.addEventListener("click", function () {
-      if (micBtn.classList.contains("listening")) { recognition.stop(); } else { recognition.start(); }
+    recognition.continuous      = false;
+    recognition.interimResults  = false;
+    recognition.lang            = "en-US";
+
+    recognition.onstart = () => startRecordingUI();
+
+    recognition.onend = () => {
+      stopRecordingUI();
+      if (voiceTranscript.trim()) {
+        // Show preview so user can edit before sending
+        showVoicePreview(voiceTranscript.trim());
+      }
+    };
+
+    recognition.onerror = () => {
+      stopRecordingUI();
+      addMsg("warning", "⚠️ Couldn't capture voice. Try again or type your message.", false);
+    };
+
+    recognition.onresult = (e) => {
+      voiceTranscript = e.results[0][0].transcript;
+    };
+
+    micBtn.addEventListener("click", () => {
+      if (isProcessing) return;
+      if (isRecording) {
+        recognition.stop();
+      } else {
+        voiceTranscript = "";
+        hideVoicePreview();
+        recognition.start();
+      }
     });
+
   } else {
     micBtn.style.opacity = "0.3";
-    micBtn.title = "Voice not supported";
+    micBtn.title = "Voice not supported in this browser";
   }
+
+  // Voice preview send/discard
+  vpSend.addEventListener("click", () => {
+    const text = vpText.value.trim();
+    if (!text) return;
+    hideVoicePreview();
+    sendMessage(text);
+  });
+
+  vpText.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); vpSend.click(); }
+    if (e.key === "Escape") { hideVoicePreview(); }
+  });
+
+  vpDiscard.addEventListener("click", () => {
+    hideVoicePreview();
+    addMsg("agent", "Voice note discarded. Type or record again when you're ready.", false);
+  });
 
   // ── Page scanner ──────────────────────────────────────
   function scanPage() {
-    var idCounter = 0;
+    let idCounter = 0;
     function afId(el) {
       if (!el.dataset.afId) el.dataset.afId = "af_" + idCounter++;
       return el.dataset.afId;
     }
+    const buttons = [], inputs = [], links = [], tables = [];
 
-    var buttons = [], inputs = [], links = [], tables = [];
-
-    document.querySelectorAll("button,[role='button'],input[type='button'],input[type='submit']").forEach(function (el) {
+    document.querySelectorAll("button,[role='button'],input[type='button'],input[type='submit']").forEach(el => {
       if (el.id === "af-launcher" || el.closest("#af-panel")) return;
-      var stepEl = el.closest("[data-wizard-step]");
-      var stepInfo = stepEl ? " [wizard-step-" + stepEl.dataset.wizardStep + "]" : "";
+      const stepEl   = el.closest("[data-wizard-step]");
+      const stepInfo = stepEl ? " [wizard-step-" + stepEl.dataset.wizardStep + "]" : "";
       buttons.push({
         afId: afId(el), type: "button",
         text: ((el.textContent || el.value || "").trim().slice(0, 60)) + stepInfo,
@@ -324,71 +676,62 @@
       });
     });
 
-    document.querySelectorAll("input:not([type='button']):not([type='submit']),textarea,select").forEach(function (el) {
-      if (el.id === "af-input" || el.closest("#af-panel")) return;
-      var stepEl = el.closest("[data-wizard-step]");
-      var step = stepEl ? parseInt(stepEl.dataset.wizardStep) : null;
-      var isVisible = !stepEl || stepEl.classList.contains("active") || getComputedStyle(stepEl).display !== "none";
-      var labelEl = el.labels && el.labels[0] ? el.labels[0] : null;
-      var formGroup = el.closest(".form-group");
-      var formLabel = formGroup ? formGroup.querySelector(".form-label") : null;
+    document.querySelectorAll("input:not([type='button']):not([type='submit']),textarea,select").forEach(el => {
+      if (el.id === "af-input" || el.id === "af-vp-text" || el.id === "af-file-input" || el.closest("#af-panel")) return;
+      const stepEl = el.closest("[data-wizard-step]");
+      const step   = stepEl ? parseInt(stepEl.dataset.wizardStep) : null;
+      const labelEl    = el.labels && el.labels[0] ? el.labels[0] : null;
+      const formGroup  = el.closest(".form-group");
+      const formLabel  = formGroup ? formGroup.querySelector(".form-label") : null;
       inputs.push({
         afId: afId(el), type: el.tagName.toLowerCase(),
         placeholder: el.placeholder || null,
         label: (labelEl ? labelEl.textContent.trim() : null) || (formLabel ? formLabel.textContent.trim() : null),
         id: el.id || null, value: el.value || null,
-        wizardStep: step, visible: isVisible
+        wizardStep: step
       });
     });
 
-    document.querySelectorAll("a[href]").forEach(function (el) {
+    document.querySelectorAll("a[href]").forEach(el => {
       if (el.closest("#af-panel")) return;
       links.push({ afId: afId(el), type: "link", text: el.textContent.trim().slice(0, 60), href: el.href || null });
     });
 
-    document.querySelectorAll("table").forEach(function (table) {
+    document.querySelectorAll("table").forEach(table => {
       if (table.closest("#af-panel")) return;
-      var headers = Array.from(table.querySelectorAll("th")).map(function (th) { return th.textContent.trim(); });
-      var rows = Array.from(table.querySelectorAll("tbody tr")).map(function (row) {
-        var badge = row.querySelector(".badge,.status");
+      const headers = Array.from(table.querySelectorAll("th")).map(th => th.textContent.trim());
+      const rows = Array.from(table.querySelectorAll("tbody tr")).map(row => {
+        const badge = row.querySelector(".badge,.status");
         return {
           afId: afId(row), id: row.id || null,
-          cells: Array.from(row.querySelectorAll("td")).map(function (td) { return td.textContent.trim().slice(0, 60); }),
+          cells: Array.from(row.querySelectorAll("td")).map(td => td.textContent.trim().slice(0, 60)),
           status: badge ? badge.textContent.trim() : null
         };
       });
-      tables.push({ afId: afId(table), type: "table", id: table.id || null, headers: headers, rows: rows.slice(0, 30) });
+      tables.push({ afId: afId(table), type: "table", id: table.id || null, headers, rows: rows.slice(0, 30) });
     });
 
-    return {
-      pageTitle: document.title,
-      url: window.location.href,
-      pageText: document.body.innerText.slice(0, 600),
-      buttons: buttons, inputs: inputs, links: links, tables: tables
-    };
+    return { pageTitle: document.title, url: window.location.href, pageText: document.body.innerText.slice(0, 600), buttons, inputs, links, tables };
   }
 
   // ── Action executor ───────────────────────────────────
   async function executeActions(actions) {
-    var successCount = 0;
-    var results = [];
-
-    for (var i = 0; i < actions.length; i++) {
-      var action = actions[i];
+    const results = [];
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i];
       await sleep(400);
       try {
-        var el = action.afId ? document.querySelector('[data-af-id="' + action.afId + '"]') : null;
+        let el = action.afId ? document.querySelector('[data-af-id="' + action.afId + '"]') : null;
         if (!el && action.elementId) el = document.getElementById(action.elementId);
         if (!el && action.selector)  el = document.querySelector(action.selector);
 
-        if (!el && action.type !== "navigate" && action.type !== "scroll" && action.type !== "click_by_text") {
+        if (!el && !["navigate","scroll","click_by_text"].includes(action.type)) {
           results.push({ ok: false, msg: "Could not find element for: <em>" + action.description + "</em>" });
           continue;
         }
 
         if (el) {
-          var origOutline = el.style.outline;
-          var origBg = el.style.background;
+          const origOutline = el.style.outline, origBg = el.style.background;
           el.style.outline = "2px solid " + theme.primary;
           el.style.background = theme.light;
           el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -403,105 +746,77 @@
           await sleep(600);
 
         } else if (action.type === "click_by_text") {
-          var searchText = (action.value || action.description || "").toLowerCase().trim();
-          var allBtns = Array.from(document.querySelectorAll("button,[role='button']")).filter(function (b) { return !b.closest("#af-panel"); });
-          var match = null;
-          for (var b = 0; b < allBtns.length; b++) {
-            if (allBtns[b].textContent.trim().toLowerCase().indexOf(searchText) !== -1) { match = allBtns[b]; break; }
-          }
+          const searchText = (action.value || action.description || "").toLowerCase().trim();
+          const allBtns = Array.from(document.querySelectorAll("button,[role='button']")).filter(b => !b.closest("#af-panel"));
+          const match   = allBtns.find(b => b.textContent.trim().toLowerCase().includes(searchText));
           if (match) {
             match.scrollIntoView({ behavior: "smooth", block: "center" });
-            await sleep(300);
-            match.click();
-            results.push({ ok: true, msg: "🖱️ Clicked \"<strong>" + match.textContent.trim().slice(0, 40) + "</strong>\"" });
+            await sleep(300); match.click();
+            results.push({ ok: true, msg: `🖱️ Clicked "<strong>${match.textContent.trim().slice(0,40)}</strong>"` });
             await sleep(700);
           } else {
-            results.push({ ok: false, msg: "⚠️ Could not find button with text: \"" + action.value + "\"" });
+            results.push({ ok: false, msg: `⚠️ Could not find button with text: "${action.value}"` });
           }
 
         } else if (action.type === "fill") {
-          el.focus();
-          el.value = action.value;
+          el.focus(); el.value = action.value;
           el.dispatchEvent(new Event("input",  { bubbles: true }));
           el.dispatchEvent(new Event("change", { bubbles: true }));
-          results.push({ ok: true, msg: "✏️ Filled <strong>" + action.description + "</strong> → \"" + action.value + "\"" });
-
-        } else if (action.type === "fill_by_label") {
-          var labelText = (action.value || "").toLowerCase();
-          var allLabels = Array.from(document.querySelectorAll(".form-label, label"));
-          var targetLabel = null;
-          for (var l = 0; l < allLabels.length; l++) {
-            if (allLabels[l].textContent.trim().toLowerCase().indexOf(labelText) !== -1) { targetLabel = allLabels[l]; break; }
-          }
-          var targetInput = targetLabel ? (targetLabel.nextElementSibling || document.getElementById(targetLabel.getAttribute("for"))) : null;
-          if (targetInput && (targetInput.tagName === "INPUT" || targetInput.tagName === "TEXTAREA" || targetInput.tagName === "SELECT")) {
-            targetInput.focus();
-            targetInput.value = action.description;
-            targetInput.dispatchEvent(new Event("input",  { bubbles: true }));
-            targetInput.dispatchEvent(new Event("change", { bubbles: true }));
-            results.push({ ok: true, msg: "✏️ Filled \"" + labelText + "\" → \"" + action.description + "\"" });
-          } else {
-            results.push({ ok: false, msg: "⚠️ Could not find field labelled: \"" + labelText + "\"" });
-          }
+          results.push({ ok: true, msg: `✏️ Filled <strong>${action.description}</strong> → "${action.value}"` });
 
         } else if (action.type === "select") {
           el.value = action.value;
           el.dispatchEvent(new Event("change", { bubbles: true }));
-          results.push({ ok: true, msg: "📋 Selected <strong>" + action.description + "</strong> → \"" + action.value + "\"" });
+          results.push({ ok: true, msg: `📋 Selected <strong>${action.description}</strong> → "${action.value}"` });
 
         } else if (action.type === "approve_row") {
-          var appBtn = el.querySelector(".btn-approve,[class*='approve']") ||
-            Array.from(el.querySelectorAll("button")).find(function (b) { return /approve/i.test(b.textContent); });
-          if (appBtn) { appBtn.click(); results.push({ ok: true, msg: "✅ Approved — <strong>" + action.description + "</strong>" }); }
-          else results.push({ ok: false, msg: "⚠️ No approve button found in row: <strong>" + action.description + "</strong>" });
+          const btn = el.querySelector(".btn-approve,[class*='approve']") ||
+            Array.from(el.querySelectorAll("button")).find(b => /approve/i.test(b.textContent));
+          if (btn) { btn.click(); results.push({ ok: true, msg: `✅ Approved — <strong>${action.description}</strong>` }); }
+          else results.push({ ok: false, msg: `⚠️ No approve button in row: <strong>${action.description}</strong>` });
 
         } else if (action.type === "reject_row") {
-          var rejBtn = el.querySelector(".btn-reject,[class*='reject']") ||
-            Array.from(el.querySelectorAll("button")).find(function (b) { return /reject/i.test(b.textContent); });
-          if (rejBtn) { rejBtn.click(); results.push({ ok: true, msg: "❌ Rejected — <strong>" + action.description + "</strong>" }); }
-          else results.push({ ok: false, msg: "⚠️ No reject button found in row: <strong>" + action.description + "</strong>" });
+          const btn = el.querySelector(".btn-reject,[class*='reject']") ||
+            Array.from(el.querySelectorAll("button")).find(b => /reject/i.test(b.textContent));
+          if (btn) { btn.click(); results.push({ ok: true, msg: `❌ Rejected — <strong>${action.description}</strong>` }); }
+          else results.push({ ok: false, msg: `⚠️ No reject button in row: <strong>${action.description}</strong>` });
 
         } else if (action.type === "escalate_row") {
-          var escBtn = el.querySelector(".btn-escalate,[class*='escalate']") ||
-            Array.from(el.querySelectorAll("button")).find(function (b) { return /escalate|flag|hold/i.test(b.textContent); });
-          if (escBtn) { escBtn.click(); results.push({ ok: true, msg: "⚠️ Escalated — <strong>" + action.description + "</strong>" }); }
+          const btn = el.querySelector(".btn-escalate,[class*='escalate']") ||
+            Array.from(el.querySelectorAll("button")).find(b => /escalate|flag|hold/i.test(b.textContent));
+          if (btn) { btn.click(); results.push({ ok: true, msg: `⚠️ Escalated — <strong>${action.description}</strong>` }); }
           else {
-            el.style.background = "#fff8e1";
-            el.style.outline = "2px solid #f57f17";
-            results.push({ ok: true, msg: "⚠️ Flagged for escalation — <strong>" + action.description + "</strong>" });
+            el.style.background = "#fff8e1"; el.style.outline = "2px solid #f57f17";
+            results.push({ ok: true, msg: `⚠️ Flagged for escalation — <strong>${action.description}</strong>` });
           }
 
         } else if (action.type === "navigate") {
-          results.push({ ok: true, msg: "🔗 Navigating to <strong>" + action.description + "</strong>" });
-          await sleep(300);
-          window.location.href = action.value;
+          results.push({ ok: true, msg: `🔗 Navigating to <strong>${action.description}</strong>` });
+          await sleep(300); window.location.href = action.value;
 
         } else if (action.type === "scroll") {
           if (action.value === "top")    window.scrollTo({ top: 0, behavior: "smooth" });
           if (action.value === "bottom") window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
           if (action.value === "down")   window.scrollBy({ top: 300, behavior: "smooth" });
           if (action.value === "up")     window.scrollBy({ top: -300, behavior: "smooth" });
-          results.push({ ok: true, msg: "↕️ Scrolled <strong>" + action.value + "</strong>" });
+          results.push({ ok: true, msg: `↕️ Scrolled <strong>${action.value}</strong>` });
 
         } else {
           results.push({ ok: false, msg: "Unknown action type: " + action.type });
         }
-
-        if (results[results.length - 1] && results[results.length - 1].ok) successCount++;
 
       } catch (err) {
         results.push({ ok: false, msg: "Error: " + err.message });
       }
     }
 
-    // Show results
-    var okMsgs  = results.filter(function (r) { return r.ok; });
-    var errMsgs = results.filter(function (r) { return !r.ok; });
-    if (okMsgs.length > 0)  addMsg("success", okMsgs.map(function (r) { return r.msg; }).join("<br>"));
-    if (errMsgs.length > 0) addMsg("error",   errMsgs.map(function (r) { return r.msg; }).join("<br>"));
+    const okMsgs  = results.filter(r => r.ok);
+    const errMsgs = results.filter(r => !r.ok);
+    if (okMsgs.length)  addMsg("success", okMsgs.map(r => r.msg).join("<br>"));
+    if (errMsgs.length) addMsg("error",   errMsgs.map(r => r.msg).join("<br>"));
 
-    // ── Rich audit trail ──────────────────────────────────
-    var operator = detectOperator();
+    // Audit trail
+    const operator = detectOperator();
     fetch(BACKEND_URL + "/api/agent/confirm", {
       method: "POST",
       headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
@@ -511,65 +826,49 @@
         pageTitle: document.title,
         pageUrl:   window.location.href,
         rowCount:  actions.length,
-        results:   results.map(function (r) { return r.msg; }),
-        actionDetails: actions.map(function (a) {
-          var match = results.find(function (r) { return r.msg && r.msg.indexOf(a.description) !== -1; });
-          return {
-            type:        a.type,
-            description: a.description,
-            value:       a.value || null,
-            elementId:   a.elementId || null,
-            success:     match ? match.ok : null
-          };
+        results:   results.map(r => r.msg),
+        actionDetails: actions.map(a => {
+          const match = results.find(r => r.msg && r.msg.includes(a.description));
+          return { type: a.type, description: a.description, value: a.value||null, elementId: a.elementId||null, success: match ? match.ok : null };
         }),
-        operator: {
-          detectedName: operator,
-          source:       operator ? "page-scrape" : "unknown"
-        },
+        operator: { detectedName: operator, source: operator ? "page-scrape" : "unknown" },
         device:    deviceInfo,
         sessionId: SESSION_KEY
       })
-    }).catch(function () {});
+    }).catch(() => {});
   }
 
-  // ── Show confirmation card ────────────────────────────
+  // ── Confirm card ──────────────────────────────────────
   function showConfirmCard(reply, plan) {
     pendingPlan = plan;
-
-    var card = document.createElement("div");
+    const card  = document.createElement("div");
     card.className = "af-confirm-card";
-    card.innerHTML =
-      '<div class="af-confirm-label">⚡ Planned Action</div>' +
-      '<div class="af-confirm-text">' + reply + '</div>' +
-      '<div class="af-confirm-btns">' +
-        '<button class="af-btn-yes" type="button">✅ Yes, do it</button>' +
-        '<button class="af-btn-no"  type="button">✕ Cancel</button>' +
-      '</div>';
-
-    var msgs = document.getElementById("af-messages");
+    card.innerHTML = `
+      <div class="af-confirm-label">⚡ Planned Action</div>
+      <div class="af-confirm-text">${reply}</div>
+      <div class="af-confirm-btns">
+        <button class="af-btn-yes" type="button">✅ Yes, do it</button>
+        <button class="af-btn-no"  type="button">✕ Cancel</button>
+      </div>`;
+    const msgs = document.getElementById("af-messages");
     msgs.appendChild(card);
     msgs.scrollTop = msgs.scrollHeight;
     setInputLocked(true);
 
-    card.querySelector(".af-btn-yes").addEventListener("click", async function () {
+    card.querySelector(".af-btn-yes").addEventListener("click", async () => {
       card.querySelector(".af-btn-yes").disabled = true;
       card.querySelector(".af-btn-no").disabled  = true;
       card.querySelector(".af-confirm-label").textContent = "⏳ Executing...";
       await executeActions(plan.actions || []);
-      card.remove();
-      pendingPlan = null;
-      setInputLocked(false);
+      card.remove(); pendingPlan = null; setInputLocked(false);
     });
-
-    card.querySelector(".af-btn-no").addEventListener("click", function () {
-      card.remove();
-      pendingPlan = null;
+    card.querySelector(".af-btn-no").addEventListener("click", () => {
+      card.remove(); pendingPlan = null;
       addMsg("agent", "Alright, cancelled. What else can I help you with?");
       setInputLocked(false);
     });
   }
 
-  // ── Lock/unlock input ─────────────────────────────────
   function setInputLocked(locked) {
     isProcessing = locked;
     document.getElementById("af-input").disabled = locked;
@@ -577,37 +876,56 @@
     document.getElementById("af-mic").disabled   = locked;
   }
 
-  // ── Send message to backend ───────────────────────────
+  // ── Send message ──────────────────────────────────────
   async function sendMessage(message) {
     setInputLocked(true);
-    addMsg("user", message);
-    var thinking = addMsg("thinking", "🧠 Thinking...", false);
+
+    // Snapshot and clear current attachments
+    const currentAttachments = [...attachments];
+    attachments = [];
+    renderTray();
+
+    // Build user bubble with text + attachment thumbnails
+    const thumbsHtml = renderAttachmentThumbs(currentAttachments);
+    addMsg("user", message + thumbsHtml);
+
+    const thinking = addMsg("thinking", "🧠 Thinking...", false);
 
     try {
-      var pageContext = scanPage();
-      var historyForAI = conversationHistory.slice(-20).map(function (m) {
-        return { role: m.type === "user" ? "user" : "assistant", content: m.html.replace(/<[^>]+>/g, "") };
-      });
+      const pageContext   = scanPage();
+      const attachContext = buildAttachmentContext(currentAttachments);
+      const historyForAI  = conversationHistory.slice(-20).map(m => ({
+        role: m.type === "user" ? "user" : "assistant",
+        content: m.html.replace(/<[^>]+>/g, "").slice(0, 400)
+      }));
 
-      var res = await fetch(BACKEND_URL + "/api/agent/message", {
+      // For images: include base64 in the payload so backend can pass to vision model if needed
+      const imageAttachments = currentAttachments
+        .filter(a => a.type.startsWith("image/"))
+        .map(a => ({ name: a.name, type: a.type, dataUrl: a.dataUrl }));
+
+      const res = await fetch(BACKEND_URL + "/api/agent/message", {
         method: "POST",
         headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
-        body: JSON.stringify({ message: message, pageContext: pageContext, history: historyForAI })
+        body: JSON.stringify({
+          message:    message + attachContext,
+          pageContext,
+          history:    historyForAI,
+          attachments: imageAttachments.length > 0 ? imageAttachments : undefined
+        })
       });
 
       thinking.remove();
       if (!res.ok) throw new Error("Backend error " + res.status);
-
-      var data = await res.json();
+      const data = await res.json();
       if (!data.success) throw new Error(data.error || "Unknown error");
 
-      var response = data.response;
-
+      const response = data.response;
       if (response.type === "chat") {
         addMsg("agent", response.reply);
         setInputLocked(false);
       } else if (response.type === "task") {
-        if (response.plan && response.plan.actions && response.plan.actions.length > 0) {
+        if (response.plan?.actions?.length > 0) {
           response.plan.originalCommand = message;
           showConfirmCard(response.reply, response.plan);
         } else {
@@ -627,47 +945,48 @@
     }
   }
 
-  // ── Send handler ──────────────────────────────────────
+  // ── Send handlers ─────────────────────────────────────
   function handleSend() {
     if (isProcessing) return;
-    var input = document.getElementById("af-input");
-    var text = input.value.trim();
-    if (!text) return;
+    const input = document.getElementById("af-input");
+    const text  = input.value.trim();
+    if (!text && attachments.length === 0) return;
+    const msg = text || (attachments.length > 0 ? "I've attached " + attachments.length + " file(s). Please review." : "");
     input.value = "";
-    sendMessage(text);
+    sendMessage(msg);
   }
 
-  document.getElementById("af-send").addEventListener("click", function (e) { e.preventDefault(); handleSend(); });
-  document.getElementById("af-input").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); handleSend(); } });
+  document.getElementById("af-send").addEventListener("click",   e => { e.preventDefault(); handleSend(); });
+  document.getElementById("af-input").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); handleSend(); } });
 
   // ── Smart chips ───────────────────────────────────────
   async function loadChips() {
-    var chipEl = document.getElementById("af-chips");
-    var defaultChips = ["Approve all pending", "Reject flagged items", "Escalate high-value", "Show summary"];
+    const chipEl = document.getElementById("af-chips");
+    const defaultChips = ["Approve all pending", "Reject flagged items", "Escalate high-value", "Show summary"];
     renderChips(defaultChips);
 
     try {
-      var pageContext = scanPage();
-      var rows = (pageContext.tables && pageContext.tables[0] ? pageContext.tables[0].rows.slice(0, 8) : []);
-      var res = await fetch(BACKEND_URL + "/api/agent/suggest", {
+      const pageContext = scanPage();
+      const rows = pageContext.tables?.[0]?.rows?.slice(0, 8) || [];
+      const res  = await fetch(BACKEND_URL + "/api/agent/suggest", {
         method: "POST",
         headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
-        body: JSON.stringify({ industry: clientInfo ? clientInfo.industry : "", rows: rows })
+        body: JSON.stringify({ industry: clientInfo?.industry || "", rows })
       });
       if (res.ok) {
-        var d = await res.json();
-        if (d.success && d.suggestions && d.suggestions.length) renderChips(d.suggestions);
+        const d = await res.json();
+        if (d.success && d.suggestions?.length) renderChips(d.suggestions);
       }
-    } catch (e) {}
+    } catch {}
 
     function renderChips(labels) {
       chipEl.innerHTML = "";
-      labels.slice(0, 5).forEach(function (label) {
-        var chip = document.createElement("button");
-        chip.className = "af-chip";
-        chip.type = "button";
+      labels.slice(0, 5).forEach(label => {
+        const chip = document.createElement("button");
+        chip.className   = "af-chip";
+        chip.type        = "button";
         chip.textContent = label;
-        chip.addEventListener("click", function () {
+        chip.addEventListener("click", () => {
           if (!isProcessing) { document.getElementById("af-input").value = label; handleSend(); }
         });
         chipEl.appendChild(chip);
@@ -675,43 +994,39 @@
     }
   }
 
-  // ── Utility ───────────────────────────────────────────
-  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   // ── Init ──────────────────────────────────────────────
   async function init() {
     try {
-      var res = await fetch(BACKEND_URL + "/api/agent/status", {
+      const res  = await fetch(BACKEND_URL + "/api/agent/status", {
         headers: { "x-api-key": API_KEY, "ngrok-skip-browser-warning": "true" }
       });
-      var data = await res.json();
-
+      const data = await res.json();
       if (!data.success) {
         clearMessages();
         addMsg("error", "⚠️ " + (data.error || "Could not connect."), false);
         return;
       }
-
       clientInfo = data.client;
       document.getElementById("af-client-name").textContent = clientInfo.name;
       updateUsage(clientInfo.tasksUsed, clientInfo.tasksLimit);
 
-      var session = loadSession();
-      if (session && session.history && session.history.length > 0) {
+      const session = loadSession();
+      if (session?.history?.length > 0) {
         conversationHistory = session.history;
         restoreMessages();
-        var pageNote = document.createElement("div");
-        pageNote.style.cssText = "text-align:center;font-size:11px;color:#bbb;padding:4px 0;";
-        pageNote.textContent = "— now on: " + document.title + " —";
-        document.getElementById("af-messages").appendChild(pageNote);
+        const note = document.createElement("div");
+        note.style.cssText = "text-align:center;font-size:11px;color:#bbb;padding:4px 0;";
+        note.textContent = "— now on: " + document.title + " —";
+        document.getElementById("af-messages").appendChild(note);
         document.getElementById("af-messages").scrollTop = 999999;
       } else {
         clearMessages();
         addMsg("agent",
-          "👋 Hello! I'm your AI agent for <strong>" + clientInfo.name + "</strong>.<br><br>" +
-          "I can see your page and understand natural language. Just tell me what you want done — " +
-          "I'll always show you exactly what I'm about to do before acting.<br><br>" +
-          "<em>What would you like me to handle?</em>"
+          `👋 Hello! I'm your AI agent for <strong>${clientInfo.name}</strong>.<br><br>` +
+          `I can see your page and understand natural language. You can also <strong>attach files or images</strong> using the 📎 button, or <strong>record a voice note</strong> with the 🎤 button — you'll see a preview to edit before it sends.<br><br>` +
+          `<em>What would you like me to handle?</em>`
         );
       }
 
@@ -726,5 +1041,4 @@
   }
 
   init();
-
 }());
