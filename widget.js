@@ -320,7 +320,7 @@
   panel.innerHTML = `
     <div id="af-header">
       <div class="af-hinfo">
-        <div class="af-title">🤖 AgentFlow AI</div>
+        <div class="af-title">🤖 LionTech Support</div>
         <div class="af-sub" id="af-client-name">Connecting...</div>
       </div>
       <div class="af-hright">
@@ -364,7 +364,7 @@
       <button id="af-mic" type="button" title="Click to record voice" disabled>🎤</button>
       <button id="af-send" type="button" disabled>➤</button>
     </div>
-    <div id="af-branding">Powered by <a href="#">AgentFlow</a></div>
+    <div id="af-branding">Powered by <a href="#">LionTech</a></div>
   `;
   document.body.appendChild(panel);
 
