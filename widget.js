@@ -173,16 +173,6 @@
     .af-confirm-btns button:hover { opacity: 0.85; }
     .af-confirm-btns button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    #af-chips {
-      padding: 6px 14px 10px; background: #f7f8fa;
-      display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
-    }
-    .af-chip {
-      background: white; border: 1px solid #ddd; border-radius: 16px;
-      padding: 5px 12px; font-size: 11px; cursor: pointer; color: ${theme.primary}; transition: all 0.18s;
-    }
-    .af-chip:hover { background: ${theme.primary}; color: white; border-color: ${theme.primary}; }
-
     /* ── Attachment staging area (above input) ── */
     #af-attachment-tray {
       display: none; padding: 8px 12px 4px;
@@ -323,8 +313,6 @@
     <div id="af-messages">
       <div class="af-msg thinking">Connecting to your AI agent...</div>
     </div>
-    <div id="af-chips"></div>
-
     <!-- Staged attachments tray -->
     <div id="af-attachment-tray"></div>
 
@@ -959,41 +947,6 @@
   document.getElementById("af-send").addEventListener("click",   e => { e.preventDefault(); handleSend(); });
   document.getElementById("af-input").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); handleSend(); } });
 
-  // ── Smart chips ───────────────────────────────────────
-  async function loadChips() {
-    const chipEl = document.getElementById("af-chips");
-    const defaultChips = ["Approve all pending", "Reject flagged items", "Escalate high-value", "Show summary"];
-    renderChips(defaultChips);
-
-    try {
-      const pageContext = scanPage();
-      const rows = pageContext.tables?.[0]?.rows?.slice(0, 8) || [];
-      const res  = await fetch(BACKEND_URL + "/api/agent/suggest", {
-        method: "POST",
-        headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
-        body: JSON.stringify({ industry: clientInfo?.industry || "", rows })
-      });
-      if (res.ok) {
-        const d = await res.json();
-        if (d.success && d.suggestions?.length) renderChips(d.suggestions);
-      }
-    } catch {}
-
-    function renderChips(labels) {
-      chipEl.innerHTML = "";
-      labels.slice(0, 5).forEach(label => {
-        const chip = document.createElement("button");
-        chip.className   = "af-chip";
-        chip.type        = "button";
-        chip.textContent = label;
-        chip.addEventListener("click", () => {
-          if (!isProcessing) { document.getElementById("af-input").value = label; handleSend(); }
-        });
-        chipEl.appendChild(chip);
-      });
-    }
-  }
-
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   // ── Init ──────────────────────────────────────────────
@@ -1031,7 +984,6 @@
       }
 
       setInputLocked(false);
-      loadChips();
 
     } catch (err) {
       clearMessages();
