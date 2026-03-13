@@ -159,6 +159,94 @@
       color: #555; line-height: 1.3;
     }
 
+
+    /* ── Download file bubble ── */
+    .af-download-card {
+      background: white; border: 1.5px solid ${theme.primary}44;
+      border-radius: 12px; padding: 12px 14px;
+      align-self: flex-start; max-width: 88%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .af-dl-label { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; color: ${theme.primary}; text-transform: uppercase; }
+    .af-dl-file  { display: flex; align-items: center; gap: 10px; }
+    .af-dl-icon  { font-size: 22px; }
+    .af-dl-info  { flex: 1; min-width: 0; }
+    .af-dl-name  { font-size: 13px; font-weight: 600; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .af-dl-size  { font-size: 11px; color: #888; margin-top: 1px; }
+    .af-dl-btn   {
+      padding: 7px 14px; background: ${theme.primary}; color: white;
+      border: none; border-radius: 8px; font-size: 12px; font-weight: 600;
+      cursor: pointer; white-space: nowrap; transition: opacity 0.18s;
+    }
+    .af-dl-btn:hover { opacity: 0.85; }
+
+    /* ── Files panel ── */
+    #af-files-panel {
+      display: none; flex-direction: column;
+      position: absolute; inset: 0; background: #f7f8fa;
+      z-index: 20; border-radius: 0 0 16px 16px;
+      overflow: hidden;
+    }
+    #af-files-panel.open { display: flex; }
+    .af-fp-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; background: ${theme.primary}; color: white;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
+    }
+    .af-fp-close { cursor: pointer; font-size: 16px; opacity: 0.75; }
+    .af-fp-close:hover { opacity: 1; }
+    .af-fp-notice {
+      background: #fff8e1; border-bottom: 1px solid #ffe082;
+      padding: 7px 14px; font-size: 11px; color: #7a5c00;
+      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+    }
+    .af-fp-list { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .af-fp-empty { text-align: center; padding: 40px 16px; color: #aaa; font-size: 13px; }
+    .af-fp-item {
+      background: white; border: 1px solid #e4e4e4; border-radius: 10px;
+      padding: 10px 12px; display: flex; align-items: center; gap: 10px;
+    }
+    .af-fp-item-icon { font-size: 20px; flex-shrink: 0; }
+    .af-fp-item-info { flex: 1; min-width: 0; }
+    .af-fp-item-name { font-size: 12px; font-weight: 600; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .af-fp-item-meta { font-size: 10px; color: #888; margin-top: 2px; }
+    .af-fp-item-badge {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+      padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+    }
+    .af-fp-item-badge.sent { background: ${theme.light}; color: ${theme.primary}; }
+    .af-fp-item-badge.received { background: #e8f5e9; color: #2e7d32; }
+    .af-fp-item-dl {
+      padding: 5px 10px; background: ${theme.primary}; color: white;
+      border: none; border-radius: 6px; font-size: 11px; font-weight: 600;
+      cursor: pointer; flex-shrink: 0; transition: opacity 0.18s;
+    }
+    .af-fp-item-dl:hover { opacity: 0.85; }
+    .af-fp-footer {
+      padding: 8px 14px; border-top: 1px solid #e4e4e4;
+      display: flex; justify-content: flex-end; flex-shrink: 0;
+    }
+    .af-fp-clear {
+      font-size: 11px; color: #aaa; background: none; border: none;
+      cursor: pointer; padding: 4px 8px;
+    }
+    .af-fp-clear:hover { color: #e53935; }
+
+    /* ── Files badge on header btn ── */
+    #af-files-btn {
+      background: none; border: none; cursor: pointer; font-size: 14px;
+      color: rgba(255,255,255,0.8); padding: 4px; position: relative;
+    }
+    #af-files-btn:hover { color: white; }
+    .af-files-badge {
+      position: absolute; top: -2px; right: -2px;
+      background: #ff5722; color: white; border-radius: 50%;
+      width: 14px; height: 14px; font-size: 8px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+
     /* ── Confirm card ── */
     .af-confirm-card {
       background: white; border: 1.5px solid ${theme.primary}44;
@@ -328,9 +416,25 @@
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;">
           <div class="af-dot"></div><span>Live</span>
         </div>
+        <button id="af-files-btn" title="Files">📁<span class="af-files-badge" id="af-files-badge" style="display:none"></span></button>
         <span id="af-close">✕</span>
       </div>
     </div>
+    <!-- Files panel overlay -->
+    <div id="af-files-panel">
+      <div class="af-fp-header">
+        <span>📁 Files</span>
+        <span class="af-fp-close" id="af-fp-close">✕</span>
+      </div>
+      <div class="af-fp-notice">⚠️ Files are stored temporarily in your browser only</div>
+      <div class="af-fp-list" id="af-fp-list">
+        <div class="af-fp-empty">No files yet. Send or receive a file to see it here.</div>
+      </div>
+      <div class="af-fp-footer">
+        <button class="af-fp-clear" id="af-fp-clear">🗑 Clear all files</button>
+      </div>
+    </div>
+
     <div id="af-usage">
       <span id="af-usage-text">Loading...</span>
       <div class="af-bar"><div class="af-bar-fill" id="af-bar-fill" style="width:0%"></div></div>
@@ -523,6 +627,119 @@
       reader.readAsDataURL(file);
     });
   }
+
+  // ════════════════════════════════════════════════════════
+  // ── FILE STORAGE (localStorage) ──────────────────────
+  // ════════════════════════════════════════════════════════
+
+  const FILES_KEY = "af_files_" + API_KEY;
+
+  function loadStoredFiles() {
+    try { return JSON.parse(localStorage.getItem(FILES_KEY) || "[]"); }
+    catch { return []; }
+  }
+
+  function saveStoredFiles(files) {
+    try { localStorage.setItem(FILES_KEY, JSON.stringify(files.slice(0, 50))); }
+    catch (e) { console.warn("localStorage full — files not saved", e); }
+  }
+
+  function storeFile(name, dataUrl, mimeType, direction) {
+    const files = loadStoredFiles();
+    const already = files.findIndex(function(f) { return f.name === name && f.direction === direction; });
+    const entry = {
+      name: name, dataUrl: dataUrl, mimeType: mimeType, direction: direction,
+      time: Date.now(),
+      size: Math.round((dataUrl.length * 3) / 4)
+    };
+    if (already >= 0) files[already] = entry;
+    else files.unshift(entry);
+    saveStoredFiles(files);
+    updateFilesBadge();
+  }
+
+  function updateFilesBadge() {
+    const files  = loadStoredFiles();
+    const badge  = document.getElementById("af-files-badge");
+    if (!badge) return;
+    if (files.length > 0) {
+      badge.style.display = "flex";
+      badge.textContent   = files.length > 9 ? "9+" : String(files.length);
+    } else {
+      badge.style.display = "none";
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024)       return bytes + " B";
+    if (bytes < 1024*1024)  return (bytes/1024).toFixed(1) + " KB";
+    return (bytes/(1024*1024)).toFixed(1) + " MB";
+  }
+
+  function fpTimeAgo(ts) {
+    const diff = Date.now() - ts;
+    const m = Math.floor(diff / 60000);
+    const h = Math.floor(m / 60);
+    const d = Math.floor(h / 24);
+    if (m < 1)  return "just now";
+    if (m < 60) return m + "m ago";
+    if (h < 24) return h + "h ago";
+    return d + "d ago";
+  }
+
+  function renderFilesPanel() {
+    const list  = document.getElementById("af-fp-list");
+    const files = loadStoredFiles();
+    if (files.length === 0) {
+      list.innerHTML = "<div class=\"af-fp-empty\">No files yet. Send or receive a file to see it here.</div>";
+      return;
+    }
+    const extIcons = { pdf:"📄", doc:"📝", docx:"📝", txt:"📋", csv:"📊", xlsx:"📊", xls:"📊",
+                       png:"🖼️", jpg:"🖼️", jpeg:"🖼️", gif:"🖼️", webp:"🖼️" };
+    list.innerHTML = files.map(function(f, i) {
+      const ext   = f.name.split(".").pop().toLowerCase();
+      const icon  = extIcons[ext] || "📁";
+      const badge = f.direction === "sent" ? "sent" : "received";
+      const label = f.direction === "sent" ? "Sent" : "Received";
+      const ago   = fpTimeAgo(f.time);
+      return "<div class=\"af-fp-item\">" +
+        "<div class=\"af-fp-item-icon\">" + icon + "</div>" +
+        "<div class=\"af-fp-item-info\">" +
+          "<div class=\"af-fp-item-name\">" + escHtml(f.name) + "</div>" +
+          "<div class=\"af-fp-item-meta\">" + formatBytes(f.size) + " \xB7 " + ago + "</div>" +
+        "</div>" +
+        "<span class=\"af-fp-item-badge " + badge + "\">" + label + "</span>" +
+        "<button class=\"af-fp-item-dl\" onclick=\"afDownloadFile(" + i + ")\">&#8595;</button>" +
+      "</div>";
+    }).join("");
+  }
+
+  window.afDownloadFile = function(idx) {
+    const files = loadStoredFiles();
+    const f = files[idx];
+    if (!f) return;
+    const a = document.createElement("a");
+    a.href = f.dataUrl; a.download = f.name; a.click();
+  };
+
+  // ── Wire up files panel toggle ─────────────────────────
+  document.getElementById("af-files-btn").addEventListener("click", function() {
+    renderFilesPanel();
+    document.getElementById("af-files-panel").classList.add("open");
+  });
+  document.getElementById("af-fp-close").addEventListener("click", function() {
+    document.getElementById("af-files-panel").classList.remove("open");
+  });
+  document.getElementById("af-fp-clear").addEventListener("click", function() {
+    if (confirm("Clear all stored files? This cannot be undone.")) {
+      localStorage.removeItem(FILES_KEY);
+      updateFilesBadge();
+      renderFilesPanel();
+    }
+  });
+
+  // Init badge on load
+  updateFilesBadge();
 
   // Build the attachment context string to inject into the AI message
   function buildAttachmentContext(atts) {
@@ -853,12 +1070,11 @@
 
   // ── Confirm card ──────────────────────────────────────
   // ── File result display ─────────────────────────────
-  // Shows step-by-step tool progress then final answer
-  function showFileResult(steps, finalReply) {
+  // Shows step-by-step tool progress, final answer, and download buttons
+  function showFileResult(steps, finalReply, downloadables) {
     const msgs = document.getElementById("af-messages");
 
     if (steps.length > 0) {
-      // Build steps card
       const card = document.createElement("div");
       card.className = "af-file-steps";
 
@@ -866,24 +1082,54 @@
         const ok      = !s.result?.startsWith("Error:");
         const icon    = ok ? "✅" : "❌";
         const preview = s.result ? s.result.split("\n")[0].slice(0, 80) : "";
-        return `<div class="af-fstep">
-          <span class="af-fstep-icon">${icon}</span>
-          <div class="af-fstep-body">
-            <div class="af-fstep-label">${s.label}</div>
-            ${preview ? `<div class="af-fstep-preview">${escHtml(preview)}</div>` : ""}
-          </div>
-        </div>`;
+        return "<div class=\"af-fstep\">" +
+          "<span class=\"af-fstep-icon\">" + icon + "</span>" +
+          "<div class=\"af-fstep-body\">" +
+            "<div class=\"af-fstep-label\">" + s.label + "</div>" +
+            (preview ? "<div class=\"af-fstep-preview\">" + escHtml(preview) + "</div>" : "") +
+          "</div></div>";
       }).join("");
 
-      card.innerHTML = `
-        <div class="af-fsteps-header">⚙️ ${steps.length} step${steps.length > 1 ? "s" : ""} completed</div>
-        <div class="af-fsteps-list">${stepsHtml}</div>`;
+      card.innerHTML = "<div class=\"af-fsteps-header\">⚙️ " + steps.length + " step" + (steps.length > 1 ? "s" : "") + " completed</div>" +
+        "<div class=\"af-fsteps-list\">" + stepsHtml + "</div>";
       msgs.appendChild(card);
     }
 
     // Final answer bubble
     if (finalReply?.trim()) {
       addMsg("agent", finalReply);
+    }
+
+    // Download buttons for any files produced
+    if (downloadables && downloadables.length > 0) {
+      downloadables.forEach(dl => {
+        // Save to localStorage files panel
+        storeFile(dl.filename, dl.dataUrl, dl.mimeType || "application/octet-stream", "received");
+
+        // Render download card in chat
+        const ext    = dl.filename.split(".").pop().toLowerCase();
+        const icons  = { pdf:"📄", doc:"📝", docx:"📝", txt:"📋", csv:"📊", xlsx:"📊", xls:"📊", default:"📁" };
+        const icon   = icons[ext] || icons.default;
+        const approxBytes = Math.round((dl.dataUrl.length * 3) / 4);
+        const card = document.createElement("div");
+        card.className = "af-download-card";
+        card.innerHTML =
+          "<div class=\"af-dl-label\">📥 File ready</div>" +
+          "<div class=\"af-dl-file\">" +
+            "<span class=\"af-dl-icon\">" + icon + "</span>" +
+            "<div class=\"af-dl-info\">" +
+              "<div class=\"af-dl-name\">" + escHtml(dl.filename) + "</div>" +
+              "<div class=\"af-dl-size\">" + formatBytes(approxBytes) + "</div>" +
+            "</div>" +
+            "<button class=\"af-dl-btn\">↓ Download</button>" +
+          "</div>";
+        card.querySelector(".af-dl-btn").addEventListener("click", () => {
+          const a = document.createElement("a");
+          a.href = dl.dataUrl; a.download = dl.filename; a.click();
+        });
+        msgs.appendChild(card);
+      });
+      updateFilesBadge();
     }
 
     msgs.scrollTop = msgs.scrollHeight;
@@ -987,7 +1233,7 @@
           setInputLocked(false);
         }
       } else if (response.type === "file_result") {
-        showFileResult(response.steps || [], response.reply);
+        showFileResult(response.steps || [], response.reply, response.downloadables || []);
         setInputLocked(false);
       } else {
         addMsg("agent", response.reply || "Done.");
