@@ -1255,7 +1255,9 @@
         message: message,
         pageContext,
         history: historyForAI,
-        // Only images go in the body for the Vision path; docs are already in the workspace
+        // Doc filenames — already uploaded to workspace, AI needs to know they're there
+        uploadedFiles: docAttachments.map(a => a.name),
+        // Images go in body for the Vision path
         attachments: imageAttachments.length > 0 ? imageAttachments.map(a => ({
           name: a.name,
           type: a.type,
