@@ -1051,7 +1051,13 @@
           results.push({ ok: true, msg: `↕️ Scrolled <strong>${action.value}</strong>` });
 
         } else {
-          results.push({ ok: false, msg: "Unknown action type: " + action.type });
+          // Catch file-operation verbs that the AI mistakenly sent as page actions
+          const fileVerbs = ["edit","write","read","create","delete","update","modify","clear_file","save"];
+          if (fileVerbs.includes(action.type)) {
+            results.push({ ok: false, msg: `⚠️ "${action.type}" is a file operation — please attach the file and ask again.` });
+          } else {
+            results.push({ ok: false, msg: "Unknown action type: " + action.type });
+          }
         }
 
       } catch (err) {
@@ -1255,7 +1261,7 @@
         message: message,
         pageContext,
         history: historyForAI,
-        // Doc filenames — already uploaded to workspace, AI needs to know they're there
+        // Doc filenames — already in workspace, server uses these to route to file loop
         uploadedFiles: docAttachments.map(a => a.name),
         // Images go in body for the Vision path
         attachments: imageAttachments.length > 0 ? imageAttachments.map(a => ({
