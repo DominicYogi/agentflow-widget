@@ -350,6 +350,7 @@
       position: absolute;
       width: 1px; height: 1px;
       opacity: 0; overflow: hidden;
+      pointer-events: none;
     }
     #af-input {
       flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 24px;
@@ -1163,12 +1164,21 @@
   }
 
   function showConfirmCard(reply, plan) {
+    // Strip any JSON fragments the AI may have leaked into the reply
+    let safeReply = (reply || "")
+      .replace(/,?\s*\{[\s\S]*?"type"\s*:\s*"[^"]*"[\s\S]*?\}/g, "")
+      .replace(/```[\s\S]*?```/g, "")
+      .trim();
+    if (!safeReply) {
+      const count = plan?.actions?.length || 0;
+      safeReply = `I'll execute ${count} action${count > 1 ? "s" : ""} on the page.`;
+    }
     pendingPlan = plan;
     const card  = document.createElement("div");
     card.className = "af-confirm-card";
     card.innerHTML = `
       <div class="af-confirm-label">⚡ Planned Action</div>
-      <div class="af-confirm-text">${reply}</div>
+      <div class="af-confirm-text">${safeReply}</div>
       <div class="af-confirm-btns">
         <button class="af-btn-yes" type="button">✅ Yes, do it</button>
         <button class="af-btn-no"  type="button">✕ Cancel</button>
