@@ -1370,10 +1370,68 @@
 
       setInputLocked(false);
 
+      // Silently learn this page in the background
+      autoLearnPage();
+
     } catch (err) {
       clearMessages();
       addMsg("error", "⚠️ Could not connect to AgentFlow backend.", false);
       console.error("AgentFlow init:", err);
+    }
+  }
+
+  // ── Auto-learn on page load ───────────────────────────
+  // Silently sends scanPage() data to the knowledge base.
+  // Uses localStorage to skip pages that haven't changed —
+  // keyed by URL + a lightweight fingerprint (button + input count).
+  const LEARN_CACHE_KEY = "af_learned_" + API_KEY;
+  const LEARN_TTL_MS    = 7 * 24 * 60 * 60 * 1000; // re-learn after 7 days
+
+  function getLearnCache() {
+    try { return JSON.parse(localStorage.getItem(LEARN_CACHE_KEY) || "{}"); }
+    catch { return {}; }
+  }
+
+  function setLearnCache(cache) {
+    try { localStorage.setItem(LEARN_CACHE_KEY, JSON.stringify(cache)); }
+    catch {}
+  }
+
+  async function autoLearnPage() {
+    try {
+      const pageData   = scanPage();
+      const url        = window.location.href;
+      const fingerprint = pageData.buttons.length + ":" + pageData.inputs.length + ":" + pageData.links.length;
+
+      const cache      = getLearnCache();
+      const cached     = cache[url];
+      const now        = Date.now();
+
+      // Skip if same fingerprint seen within TTL
+      if (cached && cached.fp === fingerprint && (now - cached.ts) < LEARN_TTL_MS) return;
+
+      await fetch(BACKEND_URL + "/api/agent/learn-page", {
+        method:  "POST",
+        headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          pageData,
+          url,
+          pageText: document.body.innerText.slice(0, 1000)
+        })
+      });
+
+      // Update cache entry for this URL
+      cache[url] = { fp: fingerprint, ts: now };
+      // Prune cache to 50 URLs max to avoid bloating localStorage
+      const keys = Object.keys(cache);
+      if (keys.length > 50) {
+        const oldest = keys.sort((a, b) => cache[a].ts - cache[b].ts).slice(0, keys.length - 50);
+        oldest.forEach(k => delete cache[k]);
+      }
+      setLearnCache(cache);
+
+    } catch (e) {
+      // Completely silent — auto-learn should never affect the user experience
     }
   }
 
