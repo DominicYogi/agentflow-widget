@@ -1178,81 +1178,111 @@
 
   // ── Send message ──────────────────────────────────────
   async function sendMessage(message) {
-    setInputLocked(true);
+  setInputLocked(true);
 
-    // Snapshot and clear current attachments
-    const currentAttachments = [...attachments];
-    attachments = [];
-    renderTray();
+  // 1. Snapshot and clear current attachments
+  const currentAttachments = [...attachments];
+  attachments = [];
+  renderTray();
 
-    // Build user bubble with text + attachment thumbnails
-    const thumbsHtml = renderAttachmentThumbs(currentAttachments);
-    addMsg("user", message + thumbsHtml);
+  // 2. Categorize attachments
+  const imageAttachments = currentAttachments.filter(a => a.type.startsWith("image/"));
+  const docAttachments = currentAttachments.filter(a => !a.type.startsWith("image/"));
 
-    const thinking = addMsg("thinking", "🧠 Thinking...", false);
+  // 3. Build UI for the user's message bubble
+  const thumbsHtml = renderAttachmentThumbs(currentAttachments);
+  addMsg("user", message + thumbsHtml);
 
-    try {
-      const pageContext   = scanPage();
-      const attachContext = buildAttachmentContext(currentAttachments);
-      const historyForAI  = conversationHistory.slice(-20).map(m => ({
-        role: m.type === "user" ? "user" : "assistant",
-        content: m.html.replace(/<[^>]+>/g, "").slice(0, 400)
-      }));
+  const thinking = addMsg("thinking", "🧠 Thinking...", false);
 
-      // For images: include base64 in the payload so backend can pass to vision model if needed
-      const imageAttachments = currentAttachments
-        .filter(a => a.type.startsWith("image/"))
-        .map(a => ({ name: a.name, type: a.type, dataUrl: a.dataUrl }));
-
-      const res = await fetch(BACKEND_URL + "/api/agent/message", {
-        method: "POST",
-        headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
-        body: JSON.stringify({
-          message:    message + attachContext,
-          pageContext,
-          history:    historyForAI,
-          attachments: imageAttachments.length > 0 ? imageAttachments : undefined
-        })
-      });
-
-      thinking.remove();
-      if (!res.ok) throw new Error("Backend error " + res.status);
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "Unknown error");
-
-      const response = data.response;
-      if (response.type === "chat") {
-        addMsg("agent", response.reply);
-        setInputLocked(false);
-      } else if (response.type === "task") {
-        if (response.plan?.actions?.length > 0) {
-          response.plan.originalCommand = message;
-          showConfirmCard(response.reply, response.plan);
-        } else {
-          addMsg("agent", response.reply);
-          setInputLocked(false);
-        }
-      } else if (response.type === "file_result") {
-        // Guard: if reply is a raw JSON string (LLM bug), unwrap it
-        let fileReply = response.reply || "Done.";
-        try {
-          const p = JSON.parse(fileReply);
-          if (p?.reply) fileReply = p.reply;
-        } catch {}
-        showFileResult(response.steps || [], fileReply, response.downloadables || []);
-        setInputLocked(false);
-      } else {
-        addMsg("agent", response.reply || "Done.");
-        setInputLocked(false);
+  try {
+    // 4. Upload Documents to the server workspace first
+    // This allows the AI to "see" them via list_files and read_file tools
+    if (docAttachments.length > 0) {
+      const formData = new FormData();
+      for (const doc of docAttachments) {
+        // Convert the base64 dataUrl back to a Blob for a standard multipart upload
+        const response = await fetch(doc.dataUrl);
+        const blob = await response.blob();
+        formData.append("files", blob, doc.name);
       }
 
-    } catch (err) {
-      thinking.remove();
-      addMsg("error", "⚠️ Something went wrong. Check that the server is running.");
-      console.error("AgentFlow error:", err);
-      setInputLocked(false);
+      await fetch(BACKEND_URL + "/api/agent/upload", {
+        method: "POST",
+        headers: { 
+          "x-api-key": API_KEY,
+          "ngrok-skip-browser-warning": "true" 
+        },
+        body: formData
+      });
     }
+
+    // 5. Prepare data for the Agent Agentic Loop
+    const pageContext = scanPage();
+    const historyForAI = conversationHistory.slice(-20).map(m => ({
+      role: m.type === "user" ? "user" : "assistant",
+      content: m.html.replace(/<[^>]+>/g, "").slice(0, 400)
+    }));
+
+    // 6. Send the message payload
+    const res = await fetch(BACKEND_URL + "/api/agent/message", {
+      method: "POST",
+      headers: { 
+        "x-api-key": API_KEY, 
+        "Content-Type": "application/json", 
+        "ngrok-skip-browser-warning": "true" 
+      },
+      body: JSON.stringify({
+        message: message,
+        pageContext,
+        history: historyForAI,
+        // Only images go in the body for the Vision path; docs are already in the workspace
+        attachments: imageAttachments.length > 0 ? imageAttachments.map(a => ({
+          name: a.name,
+          type: a.type,
+          dataUrl: a.dataUrl
+        })) : undefined
+      })
+    });
+
+    thinking.remove();
+    if (!res.ok) throw new Error("Backend error " + res.status);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Unknown error");
+
+    const response = data.response;
+
+    // 7. Handle different response types (Chat, Page Tasks, or File Operations)
+    if (response.type === "chat") {
+      addMsg("agent", response.reply);
+    } else if (response.type === "task") {
+      if (response.plan?.actions?.length > 0) {
+        response.plan.originalCommand = message;
+        showConfirmCard(response.reply, response.plan);
+      } else {
+        addMsg("agent", response.reply);
+      }
+    } else if (response.type === "file_result") {
+      let fileReply = response.reply || "Done.";
+      try {
+        const p = JSON.parse(fileReply);
+        if (p?.reply) fileReply = p.reply;
+      } catch {}
+      // Display the tool steps and any files the AI created for download
+      showFileResult(response.steps || [], fileReply, response.downloadables || []);
+    } else {
+      addMsg("agent", response.reply || "Done.");
+    }
+
+    setInputLocked(false);
+
+  } catch (err) {
+    if (thinking) thinking.remove();
+    addMsg("error", "⚠️ Something went wrong. Check that the server is running.");
+    console.error("AgentFlow error:", err);
+    setInputLocked(false);
   }
+}
 
   // ── Send handlers ─────────────────────────────────────
   function handleSend() {
