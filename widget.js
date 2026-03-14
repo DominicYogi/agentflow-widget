@@ -1028,8 +1028,21 @@
           }
 
         } else if (action.type === "navigate") {
-          results.push({ ok: true, msg: `🔗 Navigating to <strong>${action.description}</strong>` });
-          await sleep(300); window.location.href = action.value;
+          // Save any actions that come AFTER this navigate so the next page can pick them up
+          const remaining = actions.slice(i + 1);
+          if (remaining.length > 0) {
+            savePendingContinuation({
+              actions:         remaining,
+              originalCommand: pendingPlan?.originalCommand || "",
+              taskType:        pendingPlan?.taskType        || "task",
+              fromPage:        document.title,
+              fromUrl:         window.location.href
+            });
+          }
+          results.push({ ok: true, msg: `🔗 Navigating to <strong>${action.description}</strong>…` });
+          await sleep(300);
+          window.location.href = action.value;
+          return; // stop — page is unloading
 
         } else if (action.type === "scroll") {
           if (action.value === "top")    window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1370,6 +1383,21 @@
 
       setInputLocked(false);
 
+      // ── Resume a cross-page task if one was in flight ──
+      const continuation = loadPendingContinuation();
+      if (continuation) {
+        clearPendingContinuation();
+        // Give the new page's JS a moment to finish rendering
+        await sleep(800);
+        addMsg("agent",
+          `⚡ Continuing your task from <strong>${escHtml(continuation.fromPage)}</strong>…`
+        );
+        await sleep(400);
+        pendingPlan = { originalCommand: continuation.originalCommand, taskType: continuation.taskType };
+        await executeActions(continuation.actions);
+        pendingPlan = null;
+      }
+
       // Silently learn this page in the background
       autoLearnPage();
 
@@ -1378,6 +1406,32 @@
       addMsg("error", "⚠️ Could not connect to AgentFlow backend.", false);
       console.error("AgentFlow init:", err);
     }
+  }
+
+  // ── Cross-page task continuation ─────────────────────
+  const PENDING_KEY = "af_pending_" + API_KEY;
+  const PENDING_TTL = 2 * 60 * 1000; // 2 minutes — enough for any page load
+
+  function savePendingContinuation(data) {
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify({ ...data, savedAt: Date.now() })); }
+    catch {}
+  }
+
+  function loadPendingContinuation() {
+    try {
+      const raw = localStorage.getItem(PENDING_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (Date.now() - data.savedAt > PENDING_TTL) {
+        localStorage.removeItem(PENDING_KEY);
+        return null;
+      }
+      return data;
+    } catch { return null; }
+  }
+
+  function clearPendingContinuation() {
+    try { localStorage.removeItem(PENDING_KEY); } catch {}
   }
 
   // ── Auto-learn on page load ───────────────────────────
