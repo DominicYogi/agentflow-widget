@@ -1289,6 +1289,29 @@
     if (isProcessing) return;
     const input = document.getElementById("af-input");
     const text  = input.value.trim();
+    
+    // --- NEW: Secret command to scrape authenticated pages ---
+    if (text === "/learn") {
+      input.value = "";
+      addMsg("agent", "Scraping this authenticated page for the knowledge base...");
+      
+      fetch(BACKEND_URL + "/api/agent/learn-page", {
+        method: "POST",
+        headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html: document.documentElement.outerHTML, // Grabs the full logged-in DOM
+          url: window.location.href
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) addMsg("success", "Page successfully added to knowledge base!");
+        else addMsg("error", "Failed to learn page.");
+      });
+      return;
+    }
+    // ---------------------------------------------------------
+
     if (!text && attachments.length === 0) return;
     const msg = text || (attachments.length > 0 ? "I've attached " + attachments.length + " file(s). Please review." : "");
     input.value = "";
