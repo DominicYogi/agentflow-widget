@@ -342,6 +342,7 @@
       background: white; cursor: pointer; font-size: 15px;
       display: flex; align-items: center; justify-content: center;
       transition: all 0.18s; flex-shrink: 0; color: #666;
+      user-select: none;
     }
     #af-attach-btn:hover { border-color: ${theme.primary}; color: ${theme.primary}; }
     #af-attach-btn.has-files { border-color: ${theme.primary}; background: ${theme.light}; color: ${theme.primary}; }
@@ -463,7 +464,7 @@
     </div>
 
     <div id="af-input-area">
-      <button id="af-attach-btn" type="button" title="Attach file or image">📎</button>
+      <label id="af-attach-btn" for="af-file-input" title="Attach file or image">📎</label>
       <input id="af-file-input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls" />
       <input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />
       <button id="af-mic" type="button" title="Click to record voice" disabled>🎤</button>
@@ -585,8 +586,6 @@
       tray.appendChild(div);
     });
   }
-
-  attachBtn.addEventListener("click", () => fileInput.click());
 
   fileInput.addEventListener("change", async () => {
     const files = Array.from(fileInput.files);
