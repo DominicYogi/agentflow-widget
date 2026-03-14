@@ -469,7 +469,8 @@
     </div>
 
     <div id="af-input-area">
-      <label id="af-attach-btn" title="Attach file or image">📎<input id="af-file-input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls" /></label>
+      <label id="af-attach-btn" title="Attach file or image">📎<input id="af-file-input" type="file" multiple 
+  accept=".xlsx,.xls,.csv,.doc,.docx,.txt,.rtf,.odt,.ppt,.pptx,.pdf,.json,.xml,.md,image/*" /></label>
       <input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />
       <button id="af-mic" type="button" title="Click to record voice" disabled>🎤</button>
       <button id="af-send" type="button" disabled>➤</button>
