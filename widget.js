@@ -941,7 +941,14 @@
       tables.push({ afId: afId(table), type: "table", id: table.id || null, headers, rows: rows.slice(0, 30) });
     });
 
-    return { pageTitle: document.title, url: window.location.href, pageText: document.body.innerText.slice(0, 600), buttons, inputs, links, tables };
+    const headings = [];
+    document.querySelectorAll("h1,h2,h3,h4,[class*='title'],[class*='heading'],[class*='section-name']").forEach(el => {
+      if (el.closest("#af-panel")) return;
+      const text = el.textContent.trim().slice(0, 80);
+      if (text && text.length > 2) headings.push(text);
+    });
+
+    return { pageTitle: document.title, url: window.location.href, pageText: document.body.innerText.slice(0, 600), buttons, inputs, links, tables, headings };
   }
 
   // ── Action executor ───────────────────────────────────
@@ -1290,24 +1297,28 @@
     const input = document.getElementById("af-input");
     const text  = input.value.trim();
     
-    // --- NEW: Secret command to scrape authenticated pages ---
+    // --- Send structured page scan to the knowledge base ---
     if (text === "/learn") {
       input.value = "";
-      addMsg("agent", "Scraping this authenticated page for the knowledge base...");
-      
+      addMsg("agent", "📚 Scanning page for the knowledge base...");
+
+      const pageData = scanPage(); // already fully parsed by the live DOM
+
       fetch(BACKEND_URL + "/api/agent/learn-page", {
         method: "POST",
         headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
-          html: document.documentElement.outerHTML, // Grabs the full logged-in DOM
-          url: window.location.href
+          pageData,
+          url:      window.location.href,
+          pageText: document.body.innerText.slice(0, 1000)
         })
       })
       .then(res => res.json())
       .then(data => {
-        if (data.success) addMsg("success", "Page successfully added to knowledge base!");
-        else addMsg("error", "Failed to learn page.");
-      });
+        if (data.success) addMsg("success", `✅ Page "<strong>${pageData.pageTitle}</strong>" saved to knowledge base! The AI now knows its structure.`);
+        else addMsg("error", "Failed to save page: " + (data.error || "unknown error"));
+      })
+      .catch(() => addMsg("error", "⚠️ Could not connect to server."));
       return;
     }
     // ---------------------------------------------------------
