@@ -350,7 +350,6 @@
       position: absolute;
       width: 1px; height: 1px;
       opacity: 0; overflow: hidden;
-      pointer-events: none;
     }
     #af-input {
       flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 24px;
