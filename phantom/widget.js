@@ -346,7 +346,12 @@
     }
     #af-attach-btn:hover { border-color: ${theme.primary}; color: ${theme.primary}; }
     #af-attach-btn.has-files { border-color: ${theme.primary}; background: ${theme.light}; color: ${theme.primary}; }
-    #af-file-input { display: none; }
+    #af-file-input {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0; overflow: hidden;
+      pointer-events: none;
+    }
     #af-input {
       flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 24px;
       font-size: 13px; outline: none; font-family: inherit; transition: border-color 0.18s;
@@ -464,8 +469,7 @@
     </div>
 
     <div id="af-input-area">
-      <label id="af-attach-btn" for="af-file-input" title="Attach file or image">📎</label>
-      <input id="af-file-input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls" />
+      <label id="af-attach-btn" title="Attach file or image">📎<input id="af-file-input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls" /></label>
       <input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />
       <button id="af-mic" type="button" title="Click to record voice" disabled>🎤</button>
       <button id="af-send" type="button" disabled>➤</button>
@@ -1051,13 +1055,7 @@
           results.push({ ok: true, msg: `↕️ Scrolled <strong>${action.value}</strong>` });
 
         } else {
-          // Catch file-operation verbs that the AI mistakenly sent as page actions
-          const fileVerbs = ["edit","write","read","create","delete","update","modify","clear_file","save"];
-          if (fileVerbs.includes(action.type)) {
-            results.push({ ok: false, msg: `⚠️ "${action.type}" is a file operation — please attach the file and ask again.` });
-          } else {
-            results.push({ ok: false, msg: "Unknown action type: " + action.type });
-          }
+          results.push({ ok: false, msg: "Unknown action type: " + action.type });
         }
 
       } catch (err) {
@@ -1261,9 +1259,7 @@
         message: message,
         pageContext,
         history: historyForAI,
-        // Doc filenames — already in workspace, server uses these to route to file loop
-        uploadedFiles: docAttachments.map(a => a.name),
-        // Images go in body for the Vision path
+        // Only images go in the body for the Vision path; docs are already in the workspace
         attachments: imageAttachments.length > 0 ? imageAttachments.map(a => ({
           name: a.name,
           type: a.type,
