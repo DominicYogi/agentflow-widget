@@ -998,7 +998,7 @@
     const theme = client.industry === "HMO" ? "blue"
       : client.industry === "Bank" ? "dark"
       : "green";
-    const raw = `<script\n  src="https://dominicyogi.github.io/agentflow-widget/widget.js"\n  data-api-key="${apiKey}"\n  data-theme="${theme}">\n<\/script>`;
+    const raw = `<script\n  src="https://dominicyogi.github.io/agentflow-widget/widget.min.js"\n  data-api-key="${apiKey}"\n  data-theme="${theme}">\n<\/script>`;
     document.getElementById("embed-code-block").innerHTML =
       `<span class="tag">&lt;script</span>\n  <span class="attr">src</span>=<span class="val">"https://dominicyogi.github.io/agentflow-widget/widget.js"</span>\n  <span class="attr">data-api-key</span>=<span class="val">"${apiKey}"</span>\n  <span class="attr">data-theme</span>=<span class="val">"${theme}"</span><span class="tag">&gt;\n&lt;/script&gt;</span>`;
     document.getElementById("embed-code-block").dataset.raw = raw;
