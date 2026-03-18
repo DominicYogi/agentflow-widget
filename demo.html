@@ -278,6 +278,13 @@
 
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 5px; }
+
+    @keyframes rowExit {
+      0%   { opacity: 1; transform: translateX(0);     max-height: 80px; }
+      40%  { opacity: 0; transform: translateX(60px);  max-height: 80px; }
+      100% { opacity: 0; transform: translateX(60px);  max-height: 0;    padding: 0; }
+    }
+    tr.row-exiting td { animation: rowExit 0.38s ease forwards; overflow: hidden; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
 
@@ -495,8 +502,8 @@
 
       <!-- Filter tabs -->
       <div class="tabs">
-        <button class="tab active" onclick="filterTable('all',this)">All Requests</button>
-        <button class="tab" onclick="filterTable('pending',this)">Pending</button>
+        <button class="tab" onclick="filterTable('all',this)">All Requests</button>
+        <button class="tab active" onclick="filterTable('pending',this)">Pending</button>
         <button class="tab" onclick="filterTable('approved',this)">Approved</button>
         <button class="tab" onclick="filterTable('rejected',this)">Rejected</button>
         <button class="tab" onclick="filterTable('escalated',this)">Escalated</button>
@@ -919,7 +926,7 @@
   // ── State ─────────────────────────────────────────────
   let requests    = [];
   let auditLog    = [];
-  let activeFilter = "all";
+  let activeFilter = "pending";
   let activePlans  = new Set();
 
   const LS_KEY_REQUESTS = "af_demo_requests";
@@ -956,23 +963,42 @@
   function updateStatus(requestId, newStatus) {
     const req = requests.find(r => r.id === requestId);
     if (!req || req.status !== "pending") return;
-    req.status = newStatus;
 
-    // Log it
-    auditLog.unshift({
-      time: new Date().toLocaleTimeString("en-NG", {hour:"2-digit",minute:"2-digit"}),
-      action: newStatus.charAt(0).toUpperCase() + newStatus.slice(1),
-      requestId: req.id,
-      member: req.member,
-      officer: "Adaeze Okonkwo"
-    });
-
-    saveData();
-    renderAll();
-    highlightRow(requestId);
-
-    const icons = { approved:"✅", rejected:"❌", escalated:"⚠️" };
-    toast(`${icons[newStatus]||""} ${req.member} — ${newStatus}`);
+    // Disable all buttons on this row immediately (prevent double-click)
+    const row = document.getElementById("row-" + requestId);
+    if (row) {
+      row.querySelectorAll("button").forEach(b => b.disabled = true);
+      // Animate row out, THEN commit the status change + re-render
+      row.classList.add("row-exiting");
+      setTimeout(function() {
+        req.status = newStatus;
+        auditLog.unshift({
+          time: new Date().toLocaleTimeString("en-NG", {hour:"2-digit",minute:"2-digit"}),
+          action: newStatus.charAt(0).toUpperCase() + newStatus.slice(1),
+          requestId: req.id,
+          member: req.member,
+          officer: "Adaeze Okonkwo"
+        });
+        saveData();
+        renderAll();
+        const icons = { approved:"✅", rejected:"❌", escalated:"⚠️" };
+        toast(icons[newStatus] + " " + req.member + " — " + newStatus);
+      }, 380); // matches animation duration
+    } else {
+      // Fallback if row not found (e.g. agent action on hidden row)
+      req.status = newStatus;
+      auditLog.unshift({
+        time: new Date().toLocaleTimeString("en-NG", {hour:"2-digit",minute:"2-digit"}),
+        action: newStatus.charAt(0).toUpperCase() + newStatus.slice(1),
+        requestId: req.id,
+        member: req.member,
+        officer: "Adaeze Okonkwo"
+      });
+      saveData();
+      renderAll();
+      const icons = { approved:"✅", rejected:"❌", escalated:"⚠️" };
+      toast(icons[newStatus] + " " + req.member + " — " + newStatus);
+    }
   }
 
   function highlightRow(id) {
