@@ -263,7 +263,7 @@
       font-size: 13px; font-weight: 600; color: #111;
       padding: 9px 13px; border-bottom: 1px solid #f0f0f0;
     }
-    .af-confirm-rows { padding: 4px 0; }
+    .af-confirm-rows { padding: 4px 0; max-height: 160px; overflow-y: auto; }
     .af-confirm-row {
       display: flex; align-items: center; gap: 9px;
       padding: 6px 13px; font-size: 12px; color: #333;
@@ -1227,7 +1227,7 @@
 
     var msgs = document.getElementById("af-messages");
     msgs.appendChild(card);
-    // Double-rAF: first frame lets the DOM insert + measure, second frame scrolls after full paint
+    // Double-rAF: first frame lets the DOM insert + measure, second scrolls after full paint
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
         msgs.scrollTop = msgs.scrollHeight;
