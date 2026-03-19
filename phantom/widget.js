@@ -250,12 +250,54 @@
     /* ── Confirm card ── */
     .af-confirm-card {
       background: white; border: 1.5px solid ${theme.primary}44;
-      border-radius: 12px; padding: 14px 16px; align-self: flex-start; max-width: 90%;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      border-radius: 14px; align-self: flex-start; max-width: 92%;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.09); overflow: hidden;
     }
-    .af-confirm-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: ${theme.primary}; text-transform: uppercase; margin-bottom: 6px; }
-    .af-confirm-text  { font-size: 13px; color: #333; line-height: 1.5; margin-bottom: 12px; }
-    .af-confirm-btns  { display: flex; gap: 8px; }
+    .af-confirm-header {
+      background: ${theme.primary}0d; border-bottom: 1px solid ${theme.primary}22;
+      padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .af-confirm-badge {
+      background: ${theme.primary}; color: white;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+      text-transform: uppercase; padding: 3px 8px; border-radius: 6px;
+    }
+    .af-confirm-step-count {
+      font-size: 11px; color: ${theme.primary}; font-weight: 600; margin-left: auto;
+    }
+    .af-confirm-body { padding: 13px 14px 10px; }
+    .af-confirm-goal {
+      font-size: 13px; font-weight: 600; color: #111;
+      line-height: 1.45; margin-bottom: 10px;
+    }
+    .af-confirm-steps {
+      display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px;
+    }
+    .af-confirm-step {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 12px; color: #444; line-height: 1.45;
+    }
+    .af-confirm-step-num {
+      flex-shrink: 0; width: 18px; height: 18px;
+      background: ${theme.primary}15; color: ${theme.primary};
+      border-radius: 50%; font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+    }
+    .af-confirm-toggle {
+      font-size: 11px; color: #aaa; cursor: pointer;
+      background: none; border: none; padding: 0 0 6px;
+      font-family: inherit; text-decoration: underline; display: block;
+    }
+    .af-confirm-toggle:hover { color: ${theme.primary}; }
+    .af-confirm-raw {
+      display: none; background: #f7f8fa; border-radius: 8px;
+      padding: 8px 10px; margin-bottom: 10px;
+      font-size: 10px; font-family: monospace; color: #666;
+      max-height: 120px; overflow-y: auto; line-height: 1.6;
+    }
+    .af-confirm-raw.open { display: block; }
+    .af-confirm-btns  { display: flex; gap: 8px; padding: 0 14px 13px; }
     .af-confirm-btns button { flex: 1; padding: 9px 0; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.18s; }
     .af-btn-yes { background: ${theme.primary}; color: white; }
     .af-btn-no  { background: #f0f0f0; color: #555; }
@@ -346,12 +388,7 @@
     }
     #af-attach-btn:hover { border-color: ${theme.primary}; color: ${theme.primary}; }
     #af-attach-btn.has-files { border-color: ${theme.primary}; background: ${theme.light}; color: ${theme.primary}; }
-    #af-file-input {
-      position: absolute;
-      width: 1px; height: 1px;
-      opacity: 0; overflow: hidden;
-      pointer-events: none;
-    }
+    #af-file-input { display: none; }
     #af-input {
       flex: 1; padding: 10px 14px; border: 1.5px solid #ddd; border-radius: 24px;
       font-size: 13px; outline: none; font-family: inherit; transition: border-color 0.18s;
@@ -469,8 +506,8 @@
     </div>
 
     <div id="af-input-area">
-      <label id="af-attach-btn" title="Attach file or image">📎<input id="af-file-input" type="file" multiple 
-  accept=".xlsx,.xls,.csv,.doc,.docx,.txt,.rtf,.odt,.ppt,.pptx,.pdf,.json,.xml,.md,image/*" /></label>
+      <label id="af-attach-btn" for="af-file-input" title="Attach file or image">📎</label>
+      <input id="af-file-input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls" />
       <input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />
       <button id="af-mic" type="button" title="Click to record voice" disabled>🎤</button>
       <button id="af-send" type="button" disabled>➤</button>
@@ -1164,34 +1201,79 @@
   }
 
   function showConfirmCard(reply, plan) {
-    // Strip any JSON fragments the AI may have leaked into the reply
-    let safeReply = (reply || "")
-      .replace(/,?\s*\{[\s\S]*?"type"\s*:\s*"[^"]*"[\s\S]*?\}/g, "")
-      .replace(/```[\s\S]*?```/g, "")
-      .trim();
-    if (!safeReply) {
-      const count = plan?.actions?.length || 0;
-      safeReply = `I'll execute ${count} action${count > 1 ? "s" : ""} on the page.`;
-    }
     pendingPlan = plan;
-    const card  = document.createElement("div");
+    const actions = plan.actions || [];
+
+    // ── Parse reply into goal + numbered steps ─────────────
+    const lines      = (reply || "").split("\n").map(l => l.trim()).filter(Boolean);
+    const goalLine   = lines[0] || "Ready to execute this task.";
+    const stepLines  = lines.slice(1).filter(l => /^\d+[\.\)]\s/.test(l))
+                            .map(l => l.replace(/^\d+[\.\)]\s*/, "").trim());
+
+    // Fallback: if AI didn't number steps, show action descriptions grouped
+    const fallbackSteps = stepLines.length === 0
+      ? [...new Set(actions.map(a => a.description).filter(Boolean))].slice(0, 8)
+      : stepLines;
+
+    // ── Build step pills ───────────────────────────────────
+    const stepsHtml = fallbackSteps.map((s, i) =>
+      "<div class=\"af-confirm-step\">" +
+        "<div class=\"af-confirm-step-num\">" + (i + 1) + "</div>" +
+        "<span>" + escHtml(s) + "</span>" +
+      "</div>"
+    ).join("");
+
+    // ── Build raw actions summary for toggle ───────────────
+    const rawLines = actions.map((a, i) => {
+      const icon = { fill:"✏️", select:"📋", click:"🖱️", click_by_text:"🖱️",
+                     navigate:"🔗", approve_row:"✅", reject_row:"❌",
+                     escalate_row:"⚠️", scroll:"⬇️" }[a.type] || "▸";
+      return (i+1) + ". " + icon + " " + (a.description || a.type) + (a.value ? " → \"" + a.value + "\"" : "");
+    }).join("\n");
+
+    const card = document.createElement("div");
     card.className = "af-confirm-card";
-    card.innerHTML = `
-      <div class="af-confirm-label">⚡ Planned Action</div>
-      <div class="af-confirm-text">${safeReply}</div>
-      <div class="af-confirm-btns">
-        <button class="af-btn-yes" type="button">✅ Yes, do it</button>
-        <button class="af-btn-no"  type="button">✕ Cancel</button>
-      </div>`;
+    card.innerHTML =
+      "<div class=\"af-confirm-header\">" +
+        "<span class=\"af-confirm-badge\">⚡ Planned Action</span>" +
+        (actions.length > 0 ? "<span class=\"af-confirm-step-count\">" + actions.length + " step" + (actions.length !== 1 ? "s" : "") + "</span>" : "") +
+      "</div>" +
+      "<div class=\"af-confirm-body\">" +
+        "<div class=\"af-confirm-goal\">" + escHtml(goalLine) + "</div>" +
+        (fallbackSteps.length > 0
+          ? "<div class=\"af-confirm-steps\">" + stepsHtml + "</div>"
+          : "") +
+        (actions.length > 0
+          ? "<button class=\"af-confirm-toggle\" id=\"af-raw-toggle\">▸ Show raw steps (" + actions.length + ")</button>" +
+            "<div class=\"af-confirm-raw\" id=\"af-raw-detail\">" + escHtml(rawLines) + "</div>"
+          : "") +
+      "</div>" +
+      "<div class=\"af-confirm-btns\">" +
+        "<button class=\"af-btn-yes\" type=\"button\">✅ Yes, do it</button>" +
+        "<button class=\"af-btn-no\"  type=\"button\">✕ Cancel</button>" +
+      "</div>";
+
     const msgs = document.getElementById("af-messages");
     msgs.appendChild(card);
     msgs.scrollTop = msgs.scrollHeight;
     setInputLocked(true);
 
+    // Toggle raw steps
+    const toggleBtn = card.querySelector("#af-raw-toggle");
+    const rawDetail = card.querySelector("#af-raw-detail");
+    if (toggleBtn && rawDetail) {
+      toggleBtn.addEventListener("click", function() {
+        const open = rawDetail.classList.toggle("open");
+        toggleBtn.textContent = (open ? "▾ Hide raw steps" : "▸ Show raw steps") + " (" + actions.length + ")";
+      });
+    }
+
     card.querySelector(".af-btn-yes").addEventListener("click", async () => {
       card.querySelector(".af-btn-yes").disabled = true;
       card.querySelector(".af-btn-no").disabled  = true;
-      card.querySelector(".af-confirm-label").textContent = "⏳ Executing...";
+      card.querySelector(".af-confirm-header").innerHTML =
+        "<span class=\"af-confirm-badge\" style=\"background:#888\">⏳ Executing...</span>" +
+        "<span class=\"af-confirm-step-count\">please wait</span>";
       await executeActions(plan.actions || []);
       card.remove(); pendingPlan = null; setInputLocked(false);
     });
