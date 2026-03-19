@@ -125,7 +125,7 @@
     .af-bar-fill { height:100%; background: ${theme.primary}; border-radius:2px; transition: width 0.5s; }
 
     #af-messages {
-      flex: 1; padding: 14px 14px 6px; overflow-y: auto; background: #f7f8fa;
+      flex: 1; padding: 14px 14px 20px; overflow-y: auto; background: #f7f8fa;
       display: flex; flex-direction: column; gap: 10px; min-height: 200px;
     }
     .af-msg {
@@ -1227,9 +1227,11 @@
 
     var msgs = document.getElementById("af-messages");
     msgs.appendChild(card);
-    // Defer scroll so the browser has time to paint + measure the card's full height
+    // Double-rAF: first frame lets the DOM insert + measure, second frame scrolls after full paint
     requestAnimationFrame(function() {
-      card.scrollIntoView({ behavior: "smooth", block: "end" });
+      requestAnimationFrame(function() {
+        msgs.scrollTop = msgs.scrollHeight;
+      });
     });
     setInputLocked(true);
 
