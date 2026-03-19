@@ -251,25 +251,19 @@
     .af-confirm-card {
       background: white; border: 1.5px solid ${theme.primary}33;
       border-radius: 12px; align-self: flex-start; max-width: 92%;
-      box-shadow: 0 3px 14px rgba(0,0,0,0.08);
-      overflow: hidden; display: flex; flex-direction: column;
-      /* Card never taller than ~60% of the panel so buttons are always visible */
-      max-height: 340px;
+      box-shadow: 0 3px 14px rgba(0,0,0,0.08); overflow: hidden;
     }
     .af-confirm-header {
       background: ${theme.primary}; color: white;
       padding: 8px 13px; display: flex; align-items: center; justify-content: space-between;
-      flex-shrink: 0;
     }
     .af-confirm-header-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
     .af-confirm-header-count { font-size: 11px; opacity: 0.8; }
     .af-confirm-goal {
       font-size: 13px; font-weight: 600; color: #111;
       padding: 9px 13px; border-bottom: 1px solid #f0f0f0;
-      flex-shrink: 0;
     }
-    /* Rows area scrolls internally — buttons always stay visible at the bottom */
-    .af-confirm-rows { padding: 4px 0; overflow-y: auto; flex: 1; min-height: 0; }
+    .af-confirm-rows { padding: 4px 0; }
     .af-confirm-row {
       display: flex; align-items: center; gap: 9px;
       padding: 6px 13px; font-size: 12px; color: #333;
@@ -278,7 +272,7 @@
     .af-confirm-row:last-child { border-bottom: none; }
     .af-confirm-row-icon { font-size: 13px; flex-shrink: 0; width: 20px; text-align: center; }
     .af-confirm-row-text { flex: 1; line-height: 1.35; }
-    .af-confirm-btns { display: flex; gap: 8px; padding: 10px 13px; border-top: 1px solid #f0f0f0; flex-shrink: 0; }
+    .af-confirm-btns { display: flex; gap: 8px; padding: 10px 13px; border-top: 1px solid #f0f0f0; }
     .af-confirm-btns button { flex: 1; padding: 8px 0; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.18s; }
     .af-btn-yes { background: ${theme.primary}; color: white; }
     .af-btn-no  { background: #f0f0f0; color: #555; }
@@ -524,7 +518,7 @@
     el.className = "af-msg " + type;
     el.innerHTML = html;
     msgs.appendChild(el);
-    msgs.scrollTop = msgs.scrollHeight;
+    requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
     if (persist && type !== "thinking") {
       conversationHistory.push({ type, html, time: Date.now() });
       saveSession();
@@ -1233,7 +1227,10 @@
 
     var msgs = document.getElementById("af-messages");
     msgs.appendChild(card);
-    msgs.scrollTop = msgs.scrollHeight;
+    // Defer scroll so the browser has time to paint + measure the card's full height
+    requestAnimationFrame(function() {
+      card.scrollIntoView({ behavior: "smooth", block: "end" });
+    });
     setInputLocked(true);
 
     card.querySelector(".af-btn-yes").addEventListener("click", async function() {
