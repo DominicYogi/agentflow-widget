@@ -261,16 +261,16 @@
     .af-confirm-header-count { font-size: 11px; opacity: 0.8; }
     .af-confirm-goal {
       font-size: 13px; font-weight: 600; color: #111;
-      padding: 10px 13px 8px; border-bottom: 1px solid #f0f0f0;
+      padding: 9px 13px; border-bottom: 1px solid #f0f0f0;
     }
-    .af-confirm-rows { padding: 6px 0; }
+    .af-confirm-rows { padding: 4px 0; }
     .af-confirm-row {
       display: flex; align-items: center; gap: 9px;
-      padding: 5px 13px; font-size: 12px; color: #333;
-      border-bottom: 1px solid #f8f8f8;
+      padding: 6px 13px; font-size: 12px; color: #333;
+      border-bottom: 1px solid #f5f5f5;
     }
     .af-confirm-row:last-child { border-bottom: none; }
-    .af-confirm-row-icon { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; }
+    .af-confirm-row-icon { font-size: 13px; flex-shrink: 0; width: 20px; text-align: center; }
     .af-confirm-row-text { flex: 1; line-height: 1.35; }
     .af-confirm-btns { display: flex; gap: 8px; padding: 10px 13px; border-top: 1px solid #f0f0f0; }
     .af-confirm-btns button { flex: 1; padding: 8px 0; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.18s; }
@@ -1179,38 +1179,39 @@
     pendingPlan = plan;
     const actions = plan.actions || [];
 
-    // Parse reply: line 1 = goal, rest = step rows
-    const lines    = (reply || "").split("\n").map(function(l) { return l.trim(); }).filter(Boolean);
-    const goal     = lines[0] || "Ready to execute.";
-    const stepRows = lines.slice(1);
+    // Split reply: first line = goal, remaining lines = display rows
+    var lines    = (reply || "").split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+    var goal     = lines[0] || "Ready to execute.";
+    var rowLines = lines.slice(1);
 
-    // Fallback: if AI gave no step rows, derive from action descriptions
-    const rows = stepRows.length > 0
-      ? stepRows
-      : [...new Set(actions.map(function(a) { return a.description; }).filter(Boolean))].slice(0, 10);
-
-    // Build each row — icon is the first char if it's an emoji, else derive from action type
-    function rowIcon(text) {
-      if (!text) return "▸";
-      const first = text.codePointAt(0);
-      if (first > 127) return String.fromCodePoint(first); // leading emoji
-      return "▸";
-    }
-    function rowText(text) {
-      if (!text) return "";
-      const first = text.codePointAt(0);
-      // strip leading emoji + any trailing space
-      return first > 127 ? text.slice(String.fromCodePoint(first).length).trim() : text;
+    // Fallback: derive rows from unique action descriptions if AI gave none
+    if (rowLines.length === 0) {
+      var seen = {};
+      rowLines = actions.map(function(a){ return a.description; })
+        .filter(function(d){ if (!d || seen[d]) return false; seen[d]=1; return true; })
+        .slice(0, 10);
     }
 
-    const rowsHtml = rows.map(function(r) {
+    // Split leading emoji from rest of text for icon/text columns
+    function splitEmoji(str) {
+      if (!str) return { icon: "▸", text: "" };
+      var cp = str.codePointAt(0);
+      if (cp > 127) {
+        var ch = String.fromCodePoint(cp);
+        return { icon: ch, text: str.slice(ch.length).trim() };
+      }
+      return { icon: "▸", text: str };
+    }
+
+    var rowsHtml = rowLines.map(function(r) {
+      var parts = splitEmoji(r);
       return "<div class=\"af-confirm-row\">" +
-        "<span class=\"af-confirm-row-icon\">" + rowIcon(r) + "</span>" +
-        "<span class=\"af-confirm-row-text\">" + escHtml(rowText(r)) + "</span>" +
-      "</div>";
+        "<span class=\"af-confirm-row-icon\">" + parts.icon + "</span>" +
+        "<span class=\"af-confirm-row-text\">" + escHtml(parts.text) + "</span>" +
+        "</div>";
     }).join("");
 
-    const card = document.createElement("div");
+    var card = document.createElement("div");
     card.className = "af-confirm-card";
     card.innerHTML =
       "<div class=\"af-confirm-header\">" +
@@ -1218,13 +1219,13 @@
         "<span class=\"af-confirm-header-count\">" + actions.length + " step" + (actions.length !== 1 ? "s" : "") + "</span>" +
       "</div>" +
       "<div class=\"af-confirm-goal\">" + escHtml(goal) + "</div>" +
-      (rows.length > 0 ? "<div class=\"af-confirm-rows\">" + rowsHtml + "</div>" : "") +
+      (rowsHtml ? "<div class=\"af-confirm-rows\">" + rowsHtml + "</div>" : "") +
       "<div class=\"af-confirm-btns\">" +
         "<button class=\"af-btn-yes\" type=\"button\">✅ Yes, do it</button>" +
         "<button class=\"af-btn-no\"  type=\"button\">✕ Cancel</button>" +
       "</div>";
 
-    const msgs = document.getElementById("af-messages");
+    var msgs = document.getElementById("af-messages");
     msgs.appendChild(card);
     msgs.scrollTop = msgs.scrollHeight;
     setInputLocked(true);
