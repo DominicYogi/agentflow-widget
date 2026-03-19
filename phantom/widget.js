@@ -1298,8 +1298,8 @@
     const pageContext = scanPage();
     const historyForAI = conversationHistory.slice(-20).map(m => ({
       role: m.type === "user" ? "user" : "assistant",
-      content: m.html.replace(/<[^>]+>/g, "").slice(0, 400)
-    }));
+      content: (m.html || m.content || "").replace(/<[^>]+>/g, "").slice(0, 400)
+    })).filter(m => m.content.trim());
 
     // 6. Send the message payload
     const res = await fetch(BACKEND_URL + "/api/agent/message", {
@@ -1328,7 +1328,6 @@
     if (!data.success) throw new Error(data.error || "Unknown error");
 
     const response = data.response;
-    console.log("[AgentFlow] Response:", response.type, response.reply?.slice(0, 80));
 
     // 7. Handle different response types (Chat, Page Tasks, or File Operations)
     if (response.type === "chat") {
