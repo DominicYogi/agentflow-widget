@@ -252,6 +252,7 @@
       background: white; border: 1.5px solid ${theme.primary}33;
       border-radius: 12px; align-self: flex-start; max-width: 92%;
       box-shadow: 0 3px 14px rgba(0,0,0,0.08); overflow: hidden;
+      flex-shrink: 0; min-width: 240px;
     }
     .af-confirm-header {
       background: ${theme.primary}; color: white;
@@ -1227,12 +1228,10 @@
 
     var msgs = document.getElementById("af-messages");
     msgs.appendChild(card);
-    // Double-rAF: first frame lets the DOM insert + measure, second scrolls after full paint
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() {
-        msgs.scrollTop = msgs.scrollHeight;
-      });
-    });
+    // Use setTimeout so the card is fully painted before we scroll it into view
+    setTimeout(function() {
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 60);
     setInputLocked(true);
 
     card.querySelector(".af-btn-yes").addEventListener("click", async function() {
