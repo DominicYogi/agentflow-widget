@@ -1328,6 +1328,7 @@
     if (!data.success) throw new Error(data.error || "Unknown error");
 
     const response = data.response;
+    console.log("[AgentFlow] Response:", response.type, response.reply?.slice(0, 80));
 
     // 7. Handle different response types (Chat, Page Tasks, or File Operations)
     if (response.type === "chat") {
