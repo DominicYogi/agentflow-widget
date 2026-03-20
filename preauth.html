@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pre-Authorization — MediCare HMO</title>
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">
+      <div class="brand-icon">🏥</div>
+      <div>
+        <div class="brand-name">MediCare HMO</div>
+        <div class="brand-sub">Staff Portal v2.4</div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Operations</div>
+    <a class="nav-item active" href="preauth.html"><span class="nav-icon">📋</span> Pre-Authorization<span class="nav-badge" id="nav-pending-count">8</span></a>
+    <a class="nav-item" href="claims.html"><span class="nav-icon">💊</span> Claims</a>
+    <a class="nav-item" href="members.html"><span class="nav-icon">👥</span> Members</a>
+    <a class="nav-item" href="providers.html"><span class="nav-icon">🏨</span> Providers</a>
+    <a class="nav-item" href="enroll.html"><span class="nav-icon">✍️</span> Enroll Member<span class="nav-badge amber">Step 1/4</span></a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Reports</div>
+    <a class="nav-item" href="analytics.html"><span class="nav-icon">📊</span> Analytics</a>
+    <a class="nav-item" href="audit.html"><span class="nav-icon">🔍</span> Audit Log<span class="nav-badge amber" id="nav-audit-count">0</span></a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="user-avatar">AO</div>
+      <div>
+        <div class="user-name">Adaeze Okonkwo</div>
+        <div class="user-role">Senior Auth Officer</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="page-title">Pre-Authorization Queue</div>
+        <div class="breadcrumb">Operations › Pre-Authorization</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="topbar-btn btn-ghost" onclick="resetAllData()">↺ Reset Demo</button>
+      <button class="topbar-btn btn-primary-sm" onclick="addRandomRequest()">+ New Request</button>
+    </div>
+  </header>
+
+  <div class="content">
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Pending Review</div>
+        <div class="stat-value" id="stat-pending">0</div>
+        <div class="stat-change neutral">⏳ Awaiting action</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Approved Today</div>
+        <div class="stat-value" id="stat-approved">0</div>
+        <div class="stat-change up">↑ This session</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Rejected Today</div>
+        <div class="stat-value" id="stat-rejected">0</div>
+        <div class="stat-change down">Policy violations</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Value</div>
+        <div class="stat-value" id="stat-value">₦0</div>
+        <div class="stat-change neutral">Pending requests</div>
+      </div>
+    </div>
+
+    <!-- Filter tabs -->
+    <div class="tabs">
+      <button class="tab" onclick="filterTable('all',this)">All Requests</button>
+      <button class="tab active" onclick="filterTable('pending',this)">Pending</button>
+      <button class="tab" onclick="filterTable('approved',this)">Approved</button>
+      <button class="tab" onclick="filterTable('rejected',this)">Rejected</button>
+      <button class="tab" onclick="filterTable('escalated',this)">Escalated</button>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <div class="search-box">
+          <span style="color:#c0c6d0;">🔍</span>
+          <input type="text" placeholder="Search member, hospital, procedure..." id="search-input" oninput="renderTable()" />
+        </div>
+        <button class="filter-btn" id="filter-gold"   onclick="toggleFilter('Gold',this)">🥇 Gold</button>
+        <button class="filter-btn" id="filter-silver" onclick="toggleFilter('Silver',this)">🥈 Silver</button>
+        <button class="filter-btn" id="filter-bronze" onclick="toggleFilter('Bronze',this)">🥉 Bronze</button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-card">
+      <div class="table-header">
+        <div class="table-title">Authorization Requests</div>
+        <span class="table-count" id="table-count-label">Loading...</span>
+      </div>
+      <table id="preauth-table">
+        <thead>
+          <tr>
+            <th>Request ID</th><th>Member</th><th>Hospital / Provider</th>
+            <th>Procedure</th><th>Plan</th><th>Amount</th><th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="preauth-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://dominicyogi.github.io/agentflow-widget/phantom/widget.js"
+  data-api-key="af_live_d774d3e7f6b24b19"
+  data-theme="red"></script>
+<script src="shared.js"></script>
+<script>
+  let activeFilter = "pending";
+  let activePlans  = new Set();
+
+  function renderAll() {
+    renderTable();
+    renderStats();
+    updateNavBadges();
+  }
+
+  function renderStats() {
+    const pending  = requests.filter(r => r.status === "pending");
+    const approved = requests.filter(r => r.status === "approved");
+    const rejected = requests.filter(r => r.status === "rejected");
+    const totalVal = pending.reduce((s,r) => s + r.amount, 0);
+    document.getElementById("stat-pending").textContent  = pending.length;
+    document.getElementById("stat-approved").textContent = approved.length;
+    document.getElementById("stat-rejected").textContent = rejected.length;
+    document.getElementById("stat-value").textContent    = formatAmount(totalVal);
+  }
+
+  function renderTable() {
+    const search = document.getElementById("search-input").value.toLowerCase();
+    let filtered = requests.filter(r => {
+      if (activeFilter !== "all" && r.status !== activeFilter) return false;
+      if (activePlans.size > 0 && !activePlans.has(r.plan)) return false;
+      if (search && !`${r.member} ${r.hospital} ${r.procedure} ${r.id}`.toLowerCase().includes(search)) return false;
+      return true;
+    });
+    document.getElementById("table-count-label").textContent = `${filtered.length} request${filtered.length !== 1 ? "s" : ""}`;
+    if (filtered.length === 0) {
+      document.getElementById("preauth-body").innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📭</div><h3>No requests found</h3><p>Try adjusting your filters</p></div></td></tr>`;
+      return;
+    }
+    document.getElementById("preauth-body").innerHTML = filtered.map(r => {
+      const isPending = r.status === "pending";
+      const amtClass  = r.amount > 200000 ? "high" : r.amount > 80000 ? "mid" : "low";
+      const planClass = r.plan.toLowerCase();
+      return `<tr id="row-${r.id}">
+        <td><div class="cell-primary" style="font-family:var(--mono);font-size:12px;">${r.id}</div><div class="cell-sub">${r.date}</div></td>
+        <td><div class="cell-primary">${r.member}</div><div class="cell-sub">${r.memberId}</div></td>
+        <td>${r.hospital}</td>
+        <td>${r.procedure}</td>
+        <td><span class="plan-pill plan-${planClass}">${r.plan}</span></td>
+        <td><span class="amount ${amtClass}">${formatAmount(r.amount)}</span></td>
+        <td><span class="badge ${r.status}">${r.status}</span></td>
+        <td>
+          <div class="action-group">
+            <button class="act-btn act-approve"  ${!isPending?"disabled":""} onclick="updateStatus('${r.id}','approved')">✓ Approve</button>
+            <button class="act-btn act-reject"   ${!isPending?"disabled":""} onclick="updateStatus('${r.id}','rejected')">✕ Reject</button>
+            <button class="act-btn act-escalate" ${!isPending?"disabled":""} onclick="updateStatus('${r.id}','escalated')">↑ Escalate</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  function filterTable(status, el) {
+    activeFilter = status;
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    el.classList.add("active");
+    renderTable();
+  }
+
+  function toggleFilter(plan, el) {
+    if (activePlans.has(plan)) { activePlans.delete(plan); el.classList.remove("active"); }
+    else                       { activePlans.add(plan);    el.classList.add("active"); }
+    renderTable();
+  }
+
+  loadData();
+  renderAll();
+</script>
+</body>
+</html>

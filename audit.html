@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Audit Log — MediCare HMO</title>
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">
+      <div class="brand-icon">🏥</div>
+      <div>
+        <div class="brand-name">MediCare HMO</div>
+        <div class="brand-sub">Staff Portal v2.4</div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Operations</div>
+    <a class="nav-item" href="preauth.html"><span class="nav-icon">📋</span> Pre-Authorization<span class="nav-badge" id="nav-pending-count">0</span></a>
+    <a class="nav-item" href="claims.html"><span class="nav-icon">💊</span> Claims</a>
+    <a class="nav-item" href="members.html"><span class="nav-icon">👥</span> Members</a>
+    <a class="nav-item" href="providers.html"><span class="nav-icon">🏨</span> Providers</a>
+    <a class="nav-item" href="enroll.html"><span class="nav-icon">✍️</span> Enroll Member<span class="nav-badge amber">Step 1/4</span></a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Reports</div>
+    <a class="nav-item" href="analytics.html"><span class="nav-icon">📊</span> Analytics</a>
+    <a class="nav-item active" href="audit.html"><span class="nav-icon">🔍</span> Audit Log<span class="nav-badge amber" id="nav-audit-count">0</span></a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="user-avatar">AO</div>
+      <div>
+        <div class="user-name">Adaeze Okonkwo</div>
+        <div class="user-role">Senior Auth Officer</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="page-title">Audit Log</div>
+        <div class="breadcrumb">Reports › Audit Log</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="topbar-btn btn-ghost" onclick="clearAudit()">🗑 Clear Log</button>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="table-card">
+      <div class="table-header">
+        <div class="table-title">Audit Log</div>
+        <span class="table-count" id="audit-count">0 entries</span>
+      </div>
+      <table>
+        <thead><tr><th>Time</th><th>Action</th><th>Request ID</th><th>Member</th><th>Officer</th></tr></thead>
+        <tbody id="audit-body">
+          <tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><p>No actions recorded yet.</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://dominicyogi.github.io/agentflow-widget/phantom/widget.js"
+  data-api-key="af_live_d774d3e7f6b24b19"
+  data-theme="red"></script>
+<script src="shared.js"></script>
+<script>
+  function renderAudit() {
+    const tbody = document.getElementById("audit-body");
+    const countEl = document.getElementById("audit-count");
+    if (auditLog.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><p>No actions recorded yet.</p></div></td></tr>`;
+      if (countEl) countEl.textContent = "0 entries";
+      return;
+    }
+    const icons = { Approved:"✅", Rejected:"❌", Escalated:"⚠️", Enrolled:"🎉" };
+    tbody.innerHTML = auditLog.slice(0, 50).map(a => `
+      <tr>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--text-muted);">${a.time}</td>
+        <td>${icons[a.action] || ""} <strong>${a.action}</strong></td>
+        <td style="font-family:var(--mono);font-size:12px;">${a.requestId}</td>
+        <td>${a.member}</td>
+        <td>${a.officer}</td>
+      </tr>`).join("");
+    if (countEl) countEl.textContent = auditLog.length + " entr" + (auditLog.length === 1 ? "y" : "ies");
+    updateNavBadges();
+  }
+
+  function clearAudit() {
+    if (!confirm("Clear audit log?")) return;
+    auditLog = [];
+    saveData();
+    renderAudit();
+    toast("Audit log cleared");
+  }
+
+  loadData();
+  updateNavBadges();
+  renderAudit();
+</script>
+</body>
+</html>

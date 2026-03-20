@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Analytics — MediCare HMO</title>
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">
+      <div class="brand-icon">🏥</div>
+      <div>
+        <div class="brand-name">MediCare HMO</div>
+        <div class="brand-sub">Staff Portal v2.4</div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Operations</div>
+    <a class="nav-item" href="preauth.html"><span class="nav-icon">📋</span> Pre-Authorization<span class="nav-badge" id="nav-pending-count">0</span></a>
+    <a class="nav-item" href="claims.html"><span class="nav-icon">💊</span> Claims</a>
+    <a class="nav-item" href="members.html"><span class="nav-icon">👥</span> Members</a>
+    <a class="nav-item" href="providers.html"><span class="nav-icon">🏨</span> Providers</a>
+    <a class="nav-item" href="enroll.html"><span class="nav-icon">✍️</span> Enroll Member<span class="nav-badge amber">Step 1/4</span></a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Reports</div>
+    <a class="nav-item active" href="analytics.html"><span class="nav-icon">📊</span> Analytics</a>
+    <a class="nav-item" href="audit.html"><span class="nav-icon">🔍</span> Audit Log<span class="nav-badge amber" id="nav-audit-count">0</span></a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="user-avatar">AO</div>
+      <div>
+        <div class="user-name">Adaeze Okonkwo</div>
+        <div class="user-role">Senior Auth Officer</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="page-title">Analytics Overview</div>
+        <div class="breadcrumb">Reports › Analytics</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="detail-row">
+      <div class="info-card">
+        <h4>Approval Rate</h4>
+        <div class="info-row"><span class="info-key">Approved</span><span class="info-val" id="anal-approved">0</span></div>
+        <div class="info-row"><span class="info-key">Rejected</span><span class="info-val" id="anal-rejected">0</span></div>
+        <div class="info-row"><span class="info-key">Escalated</span><span class="info-val" id="anal-escalated">0</span></div>
+        <div class="info-row"><span class="info-key">Pending</span><span class="info-val" id="anal-pending">0</span></div>
+      </div>
+      <div class="info-card">
+        <h4>Financial Summary</h4>
+        <div class="info-row"><span class="info-key">Pending Value</span><span class="info-val" id="anal-pending-val">₦0</span></div>
+        <div class="info-row"><span class="info-key">Approved Value</span><span class="info-val" id="anal-approved-val">₦0</span></div>
+        <div class="info-row"><span class="info-key">Rejected Value</span><span class="info-val" id="anal-rejected-val">₦0</span></div>
+        <div class="info-row"><span class="info-key">Avg Request</span><span class="info-val" id="anal-avg">₦0</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://dominicyogi.github.io/agentflow-widget/phantom/widget.js"
+  data-api-key="af_live_d774d3e7f6b24b19"
+  data-theme="red"></script>
+<script src="shared.js"></script>
+<script>
+  function renderAnalytics() {
+    const groups = { approved:0, rejected:0, escalated:0, pending:0 };
+    const values = { approved:0, rejected:0, pending:0 };
+    requests.forEach(r => {
+      groups[r.status]++;
+      if (r.status === "approved") values.approved += r.amount;
+      if (r.status === "rejected") values.rejected += r.amount;
+      if (r.status === "pending")  values.pending  += r.amount;
+    });
+    const avg = requests.length ? Math.round(requests.reduce((s,r) => s + r.amount, 0) / requests.length) : 0;
+    document.getElementById("anal-approved").textContent     = groups.approved;
+    document.getElementById("anal-rejected").textContent     = groups.rejected;
+    document.getElementById("anal-escalated").textContent    = groups.escalated;
+    document.getElementById("anal-pending").textContent      = groups.pending;
+    document.getElementById("anal-pending-val").textContent  = formatAmount(values.pending);
+    document.getElementById("anal-approved-val").textContent = formatAmount(values.approved);
+    document.getElementById("anal-rejected-val").textContent = formatAmount(values.rejected);
+    document.getElementById("anal-avg").textContent          = formatAmount(avg);
+  }
+
+  loadData();
+  updateNavBadges();
+  renderAnalytics();
+</script>
+</body>
+</html>

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Enroll Member — MediCare HMO</title>
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">
+      <div class="brand-icon">🏥</div>
+      <div>
+        <div class="brand-name">MediCare HMO</div>
+        <div class="brand-sub">Staff Portal v2.4</div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Operations</div>
+    <a class="nav-item" href="preauth.html"><span class="nav-icon">📋</span> Pre-Authorization<span class="nav-badge" id="nav-pending-count">0</span></a>
+    <a class="nav-item" href="claims.html"><span class="nav-icon">💊</span> Claims</a>
+    <a class="nav-item" href="members.html"><span class="nav-icon">👥</span> Members</a>
+    <a class="nav-item" href="providers.html"><span class="nav-icon">🏨</span> Providers</a>
+    <a class="nav-item active" href="enroll.html"><span class="nav-icon">✍️</span> Enroll Member<span class="nav-badge amber" id="nav-enroll-step">Step 1/4</span></a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Reports</div>
+    <a class="nav-item" href="analytics.html"><span class="nav-icon">📊</span> Analytics</a>
+    <a class="nav-item" href="audit.html"><span class="nav-icon">🔍</span> Audit Log<span class="nav-badge amber" id="nav-audit-count">0</span></a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="user-avatar">AO</div>
+      <div>
+        <div class="user-name">Adaeze Okonkwo</div>
+        <div class="user-role">Senior Auth Officer</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="page-title">Member Enrollment</div>
+        <div class="breadcrumb">Operations › Enroll Member</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- Wizard progress bar -->
+    <div class="wizard-bar" id="wz-bar">
+      <div class="wz-step">
+        <div class="wz-circle active" id="wz-c1">1</div>
+        <div class="wz-label"><strong>Personal Info</strong><span>Member details</span></div>
+      </div>
+      <div class="wz-line" id="wz-l1"></div>
+      <div class="wz-step">
+        <div class="wz-circle" id="wz-c2">2</div>
+        <div class="wz-label"><strong>Plan & Coverage</strong><span>Health plan</span></div>
+      </div>
+      <div class="wz-line" id="wz-l2"></div>
+      <div class="wz-step">
+        <div class="wz-circle" id="wz-c3">3</div>
+        <div class="wz-label"><strong>Documents</strong><span>Verification</span></div>
+      </div>
+      <div class="wz-line" id="wz-l3"></div>
+      <div class="wz-step">
+        <div class="wz-circle" id="wz-c4">4</div>
+        <div class="wz-label"><strong>Review & Submit</strong><span>Confirm</span></div>
+      </div>
+    </div>
+
+    <!-- Success state -->
+    <div class="enroll-success" id="enroll-success">
+      <div class="success-icon">🎉</div>
+      <div>
+        <div class="success-title">Member Enrolled Successfully!</div>
+        <div class="success-sub" id="success-desc">The new member has been registered. Their ID card will be issued within 24 hours.</div>
+        <div class="success-id" id="success-member-id">MED-000000</div><br/>
+        <button class="new-enroll-btn" onclick="resetEnrollment()">+ Enroll Another Member</button>
+      </div>
+    </div>
+
+    <!-- ── STEP 1: Personal Info ── -->
+    <div class="step-page active" id="enroll-step-1" data-wizard-step="1">
+      <div class="enroll-card">
+        <h3>👤 Personal Information</h3>
+        <div class="enroll-desc">Enter the new member's full name, contact details and employment info.</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">First Name *</label>
+            <input type="text" class="form-input" id="ef-firstname" placeholder="e.g. Chidi" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last Name *</label>
+            <input type="text" class="form-input" id="ef-lastname" placeholder="e.g. Okeke" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date of Birth *</label>
+            <input type="date" class="form-input" id="ef-dob" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Gender</label>
+            <select class="form-select" id="ef-gender">
+              <option value="">Select...</option>
+              <option>Male</option>
+              <option>Female</option>
+              <option>Prefer not to say</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone Number *</label>
+            <input type="tel" class="form-input" id="ef-phone" placeholder="+234 801 234 5678" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-input" id="ef-email" placeholder="member@company.com" />
+          </div>
+          <div class="form-group full">
+            <label class="form-label">Home Address</label>
+            <input type="text" class="form-input" id="ef-address" placeholder="12 Adeola Odeku Street, Victoria Island, Lagos" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Employer / Company</label>
+            <input type="text" class="form-input" id="ef-employer" placeholder="e.g. Dangote Industries" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Staff / Employee ID</label>
+            <input type="text" class="form-input" id="ef-staffid" placeholder="e.g. DAN-10441" />
+          </div>
+        </div>
+        <div class="enroll-nav">
+          <span style="font-size:12px;color:var(--text-muted);">Step 1 of 4 — Personal Information</span>
+          <button class="e-btn e-primary" id="enroll-next-1" onclick="enrollGoTo(2)">Next: Plan Selection →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 2: Plan & Coverage ── -->
+    <div class="step-page" id="enroll-step-2" data-wizard-step="2">
+      <div class="enroll-card">
+        <h3>📋 Plan & Coverage</h3>
+        <div class="enroll-desc">Select the health plan, coverage type and preferred hospital for this member.</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Health Plan *</label>
+            <select class="form-select" id="ef-plan">
+              <option value="">Select plan...</option>
+              <option value="Bronze">Bronze — Basic ₦15,000/mo</option>
+              <option value="Silver">Silver — Standard ₦28,000/mo</option>
+              <option value="Gold">Gold — Enhanced ₦52,000/mo</option>
+              <option value="Platinum">Platinum — Comprehensive ₦95,000/mo</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Coverage Type</label>
+            <select class="form-select" id="ef-coverage">
+              <option value="">Select coverage...</option>
+              <option>Individual only</option>
+              <option>Individual + Spouse</option>
+              <option>Family (up to 4)</option>
+              <option>Family Extended (5+)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Number of Dependants</label>
+            <select class="form-select" id="ef-dependants">
+              <option value="0">0 — None</option>
+              <option value="1">1 dependant</option>
+              <option value="2">2 dependants</option>
+              <option value="3">3 dependants</option>
+              <option value="4">4 dependants</option>
+              <option value="5+">5 or more</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Preferred Hospital</label>
+            <select class="form-select" id="ef-hospital">
+              <option value="">Select hospital...</option>
+              <option>Lagos Island General Hospital</option>
+              <option>Reddington Hospital</option>
+              <option>St. Nicholas Hospital</option>
+              <option>Eko Hospital</option>
+              <option>LUTH (Lagos University Teaching Hospital)</option>
+              <option>Lagoon Hospital</option>
+              <option>Evercare Hospital</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Coverage Start Date *</label>
+            <input type="date" class="form-input" id="ef-startdate" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Payment Frequency</label>
+            <select class="form-select" id="ef-payment">
+              <option>Monthly</option>
+              <option>Quarterly</option>
+              <option>Annually (10% discount)</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label class="form-label">Pre-existing Conditions (if any)</label>
+            <input type="text" class="form-input" id="ef-conditions" placeholder="e.g. Hypertension, Diabetes — leave blank if none" />
+          </div>
+        </div>
+        <div class="enroll-nav">
+          <button class="e-btn e-ghost" onclick="enrollGoTo(1)">← Back</button>
+          <button class="e-btn e-primary" id="enroll-next-2" onclick="enrollGoTo(3)">Next: Documents →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 3: Documents ── -->
+    <div class="step-page" id="enroll-step-3" data-wizard-step="3">
+      <div class="enroll-card">
+        <h3>📂 Document Verification</h3>
+        <div class="enroll-desc">Tick each document as you physically verify and collect it from the member. All required items must be checked before proceeding.</div>
+        <div class="doc-list">
+          <button type="button" class="doc-item" id="doc-id" onclick="toggleDoc('doc-id')">
+            <div class="doc-box" id="docbox-id"></div>
+            <div>
+              <div class="doc-title">Valid Government-Issued ID <span style="color:var(--red);font-size:11px;">Required</span></div>
+              <div class="doc-sub">National ID card, International Passport, Voter's Card or Driver's Licence</div>
+            </div>
+          </button>
+          <button type="button" class="doc-item" id="doc-photo" onclick="toggleDoc('doc-photo')">
+            <div class="doc-box" id="docbox-photo"></div>
+            <div>
+              <div class="doc-title">Passport Photograph <span style="color:var(--red);font-size:11px;">Required</span></div>
+              <div class="doc-sub">Recent passport-size photo, white background (2 copies)</div>
+            </div>
+          </button>
+          <button type="button" class="doc-item" id="doc-letter" onclick="toggleDoc('doc-letter')">
+            <div class="doc-box" id="docbox-letter"></div>
+            <div>
+              <div class="doc-title">Employer Introduction Letter <span style="color:var(--red);font-size:11px;">Required</span></div>
+              <div class="doc-sub">Company letterhead confirming employment and eligibility for coverage</div>
+            </div>
+          </button>
+          <button type="button" class="doc-item" id="doc-form" onclick="toggleDoc('doc-form')">
+            <div class="doc-box" id="docbox-form"></div>
+            <div>
+              <div class="doc-title">Signed Enrollment Form <span style="color:var(--red);font-size:11px;">Required</span></div>
+              <div class="doc-sub">Completed MediCare HMO form with member signature and date</div>
+            </div>
+          </button>
+          <button type="button" class="doc-item" id="doc-medical" onclick="toggleDoc('doc-medical')">
+            <div class="doc-box" id="docbox-medical"></div>
+            <div>
+              <div class="doc-title">Medical History Form <span style="color:var(--text-muted);font-size:11px;">If applicable</span></div>
+              <div class="doc-sub">Required if member declared any pre-existing medical conditions</div>
+            </div>
+          </button>
+        </div>
+        <div class="form-group" style="margin-top:20px;">
+          <label class="form-label">Verification Officer Notes</label>
+          <input type="text" class="form-input" id="ef-docnotes" placeholder="e.g. Passport copy certified true. All originals verified." />
+        </div>
+        <div style="margin-top:16px; padding:12px 16px; background:var(--amber-bg); border:1px solid #fde68a; border-radius:8px; font-size:12px; color:#92400e;">
+          ⚠️ <strong>Note:</strong> At minimum the first 4 documents must be verified before proceeding to submission.
+        </div>
+        <div class="enroll-nav">
+          <button class="e-btn e-ghost" onclick="enrollGoTo(2)">← Back</button>
+          <button class="e-btn e-primary" id="enroll-next-3" onclick="enrollGoTo(4)">Next: Review & Submit →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 4: Review & Submit ── -->
+    <div class="step-page" id="enroll-step-4" data-wizard-step="4">
+      <div class="enroll-card">
+        <h3>✅ Review & Confirm Enrollment</h3>
+        <div class="enroll-desc">Confirm all details before submitting. A Member ID will be generated automatically on submission.</div>
+        <div class="summary-grid" id="enroll-summary"></div>
+        <div class="form-group">
+          <label class="form-label">Enrollment Processed By *</label>
+          <input type="text" class="form-input" id="ef-officer" value="Adaeze Okonkwo" />
+        </div>
+        <div style="margin-top:16px; padding:12px 16px; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; font-size:12px; color:#92400e;">
+          ⚠️ By submitting you confirm that all documents have been verified and the information above is accurate. This action will be permanently recorded in the audit log.
+        </div>
+        <div class="enroll-nav">
+          <button class="e-btn e-ghost" onclick="enrollGoTo(3)">← Back</button>
+          <button class="e-btn e-success" id="enroll-submit-btn" onclick="submitEnrollment()">✓ Submit Enrollment</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://dominicyogi.github.io/agentflow-widget/phantom/widget.js"
+  data-api-key="af_live_d774d3e7f6b24b19"
+  data-theme="red"></script>
+<script src="shared.js"></script>
+<script>
+  let enrollStep = 1;
+  const docChecked = {};
+
+  function enrollGoTo(step) {
+    if (step > 1 && enrollStep === 1) {
+      const fn = document.getElementById("ef-firstname").value.trim();
+      const ln = document.getElementById("ef-lastname").value.trim();
+      const ph = document.getElementById("ef-phone").value.trim();
+      if (!fn || !ln || !ph) { toast("⚠️ Please fill in First Name, Last Name and Phone Number"); return; }
+    }
+    if (step > 2 && enrollStep === 2) {
+      const plan = document.getElementById("ef-plan").value;
+      const sd   = document.getElementById("ef-startdate").value;
+      if (!plan) { toast("⚠️ Please select a health plan"); return; }
+      if (!sd)   { toast("⚠️ Please set a coverage start date"); return; }
+    }
+    document.getElementById("enroll-step-" + enrollStep).classList.remove("active");
+    enrollStep = step;
+    document.getElementById("enroll-step-" + enrollStep).classList.add("active");
+    updateWizardBar();
+    if (step === 4) populateReviewSummary();
+    document.querySelector(".content").scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function updateWizardBar() {
+    for (let i = 1; i <= 4; i++) {
+      const circle = document.getElementById("wz-c" + i);
+      circle.classList.remove("active", "done");
+      if (i < enrollStep)       { circle.classList.add("done");   circle.textContent = "✓"; }
+      else if (i === enrollStep) { circle.classList.add("active"); circle.textContent = i;   }
+      else                       { circle.textContent = i; }
+    }
+    for (let i = 1; i <= 3; i++) {
+      document.getElementById("wz-l" + i).classList.toggle("done", i < enrollStep);
+    }
+    const badge = document.getElementById("nav-enroll-step");
+    if (badge) badge.textContent = "Step " + enrollStep + "/4";
+  }
+
+  function toggleDoc(id) {
+    docChecked[id] = !docChecked[id];
+    const item = document.getElementById(id);
+    const box  = document.getElementById("docbox-" + id.replace("doc-", ""));
+    item.classList.toggle("checked", docChecked[id]);
+    box.textContent = docChecked[id] ? "✓" : "";
+  }
+
+  function populateReviewSummary() {
+    const v = (id) => document.getElementById(id)?.value?.trim() || "—";
+    const planRaw  = v("ef-plan");
+    const planName = planRaw.includes("Bronze") ? "Bronze" : planRaw.includes("Silver") ? "Silver" : planRaw.includes("Gold") ? "Gold" : planRaw.includes("Platinum") ? "Platinum" : planRaw || "—";
+    document.getElementById("enroll-summary").innerHTML = `
+      <div class="sum-box">
+        <h4>Personal Details</h4>
+        <div class="sum-row"><span class="sum-key">Full Name</span><span class="sum-val">${v("ef-firstname")} ${v("ef-lastname")}</span></div>
+        <div class="sum-row"><span class="sum-key">Date of Birth</span><span class="sum-val">${v("ef-dob") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Gender</span><span class="sum-val">${v("ef-gender") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Phone</span><span class="sum-val">${v("ef-phone")}</span></div>
+        <div class="sum-row"><span class="sum-key">Email</span><span class="sum-val">${v("ef-email") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Employer</span><span class="sum-val">${v("ef-employer") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Staff ID</span><span class="sum-val">${v("ef-staffid") || "—"}</span></div>
+      </div>
+      <div class="sum-box">
+        <h4>Plan & Coverage</h4>
+        <div class="sum-row"><span class="sum-key">Plan</span><span class="sum-val">${planName}</span></div>
+        <div class="sum-row"><span class="sum-key">Coverage Type</span><span class="sum-val">${v("ef-coverage") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Dependants</span><span class="sum-val">${v("ef-dependants")}</span></div>
+        <div class="sum-row"><span class="sum-key">Hospital</span><span class="sum-val">${v("ef-hospital") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Start Date</span><span class="sum-val">${v("ef-startdate") || "—"}</span></div>
+        <div class="sum-row"><span class="sum-key">Payment</span><span class="sum-val">${v("ef-payment")}</span></div>
+        <div class="sum-row"><span class="sum-key">Conditions</span><span class="sum-val">${v("ef-conditions") || "None"}</span></div>
+      </div>
+      <div class="sum-box">
+        <h4>Documents Verified</h4>
+        <div class="sum-row"><span class="sum-key">Gov ID</span><span class="sum-val" style="color:${docChecked['doc-id']?'var(--green)':'var(--red)'}">${docChecked['doc-id']?'✓ Verified':'✗ Missing'}</span></div>
+        <div class="sum-row"><span class="sum-key">Photograph</span><span class="sum-val" style="color:${docChecked['doc-photo']?'var(--green)':'var(--red)'}">${docChecked['doc-photo']?'✓ Verified':'✗ Missing'}</span></div>
+        <div class="sum-row"><span class="sum-key">Employer Letter</span><span class="sum-val" style="color:${docChecked['doc-letter']?'var(--green)':'var(--red)'}">${docChecked['doc-letter']?'✓ Verified':'✗ Missing'}</span></div>
+        <div class="sum-row"><span class="sum-key">Enrollment Form</span><span class="sum-val" style="color:${docChecked['doc-form']?'var(--green)':'var(--red)'}">${docChecked['doc-form']?'✓ Verified':'✗ Missing'}</span></div>
+        <div class="sum-row"><span class="sum-key">Medical Form</span><span class="sum-val" style="color:${docChecked['doc-medical']?'var(--green)':'var(--text-muted)'}">${docChecked['doc-medical']?'✓ Verified':'— N/A'}</span></div>
+      </div>
+      <div class="sum-box">
+        <h4>Notes</h4>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">${v("ef-docnotes") || "No notes added."}</div>
+      </div>`;
+  }
+
+  function submitEnrollment() {
+    const fn = document.getElementById("ef-firstname").value.trim();
+    const ln = document.getElementById("ef-lastname").value.trim();
+    const officer = document.getElementById("ef-officer").value.trim() || "Unknown Officer";
+    const requiredDocs = ["doc-id","doc-photo","doc-letter","doc-form"];
+    const missingDocs  = requiredDocs.filter(d => !docChecked[d]);
+    if (missingDocs.length > 0) { toast("⚠️ Please verify all 4 required documents first (Step 3)"); return; }
+    const btn = document.getElementById("enroll-submit-btn");
+    btn.disabled = true; btn.textContent = "Submitting...";
+    setTimeout(() => {
+      const memberId = "MED-" + String(Math.floor(100000 + Math.random() * 900000));
+      const planRaw  = document.getElementById("ef-plan").value;
+      const planName = planRaw.includes("Bronze") ? "Bronze" : planRaw.includes("Silver") ? "Silver" : planRaw.includes("Gold") ? "Gold" : planRaw.includes("Platinum") ? "Platinum" : "Standard";
+      auditLog.unshift({
+        time: new Date().toLocaleTimeString("en-NG", {hour:"2-digit",minute:"2-digit"}),
+        action: "Enrolled", requestId: memberId,
+        member: fn + " " + ln, officer
+      });
+      saveData();
+      document.getElementById("enroll-step-4").classList.remove("active");
+      document.getElementById("wz-bar").style.display = "none";
+      document.getElementById("success-desc").textContent = fn + " " + ln + " has been enrolled on the " + planName + " plan. Their ID card will be issued within 24 hours.";
+      document.getElementById("success-member-id").textContent = memberId;
+      document.getElementById("enroll-success").classList.add("show");
+      toast("🎉 " + fn + " " + ln + " enrolled — " + memberId);
+      btn.disabled = false; btn.textContent = "✓ Submit Enrollment";
+    }, 800);
+  }
+
+  function resetEnrollment() {
+    ["ef-firstname","ef-lastname","ef-dob","ef-phone","ef-email","ef-address",
+     "ef-employer","ef-staffid","ef-plan","ef-coverage","ef-hospital",
+     "ef-startdate","ef-conditions","ef-docnotes","ef-officer"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = id === "ef-officer" ? "Adaeze Okonkwo" : id === "ef-dependants" ? "0" : "";
+    });
+    ["id","photo","letter","form","medical"].forEach(d => {
+      docChecked["doc-" + d] = false;
+      const item = document.getElementById("doc-" + d);
+      const box  = document.getElementById("docbox-" + d);
+      if (item) item.classList.remove("checked");
+      if (box)  box.textContent = "";
+    });
+    enrollStep = 1;
+    document.querySelectorAll(".step-page").forEach(p => p.classList.remove("active"));
+    document.getElementById("enroll-step-1").classList.add("active");
+    document.getElementById("wz-bar").style.display = "flex";
+    document.getElementById("enroll-success").classList.remove("show");
+    updateWizardBar();
+  }
+
+  loadData();
+  updateNavBadges();
+</script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Claims — MediCare HMO</title>
+  <link rel="stylesheet" href="shared.css" />
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">
+      <div class="brand-icon">🏥</div>
+      <div>
+        <div class="brand-name">MediCare HMO</div>
+        <div class="brand-sub">Staff Portal v2.4</div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Operations</div>
+    <a class="nav-item" href="preauth.html"><span class="nav-icon">📋</span> Pre-Authorization<span class="nav-badge" id="nav-pending-count">0</span></a>
+    <a class="nav-item active" href="claims.html"><span class="nav-icon">💊</span> Claims</a>
+    <a class="nav-item" href="members.html"><span class="nav-icon">👥</span> Members</a>
+    <a class="nav-item" href="providers.html"><span class="nav-icon">🏨</span> Providers</a>
+    <a class="nav-item" href="enroll.html"><span class="nav-icon">✍️</span> Enroll Member<span class="nav-badge amber">Step 1/4</span></a>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Reports</div>
+    <a class="nav-item" href="analytics.html"><span class="nav-icon">📊</span> Analytics</a>
+    <a class="nav-item" href="audit.html"><span class="nav-icon">🔍</span> Audit Log<span class="nav-badge amber" id="nav-audit-count">0</span></a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="user-card">
+      <div class="user-avatar">AO</div>
+      <div>
+        <div class="user-name">Adaeze Okonkwo</div>
+        <div class="user-role">Senior Auth Officer</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="page-title">Claims Management</div>
+        <div class="breadcrumb">Operations › Claims</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="topbar-btn btn-ghost" onclick="resetAllData()">↺ Reset Demo</button>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Open Claims</div><div class="stat-value">14</div><div class="stat-change neutral">Awaiting payment</div></div>
+      <div class="stat-card"><div class="stat-label">Processed</div><div class="stat-value">237</div><div class="stat-change up">↑ This month</div></div>
+      <div class="stat-card"><div class="stat-label">Disputed</div><div class="stat-value">3</div><div class="stat-change down">Needs review</div></div>
+      <div class="stat-card"><div class="stat-label">Paid Out</div><div class="stat-value">₦18.4M</div><div class="stat-change up">↑ March 2026</div></div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-header"><div class="table-title">Recent Claims</div></div>
+      <table>
+        <thead><tr><th>Claim ID</th><th>Member</th><th>Provider</th><th>Diagnosis</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><span class="cell-sub">CLM-2026-0341</span></td><td>Olumide Adeyemi</td><td>Lagos Island General</td><td>Hypertension follow-up</td><td class="amount low">₦28,500</td><td><span class="badge approved">Approved</span></td></tr>
+          <tr><td><span class="cell-sub">CLM-2026-0340</span></td><td>Chioma Nwosu</td><td>Reddington Hospital</td><td>Appendectomy (post-op)</td><td class="amount high">₦340,000</td><td><span class="badge pending">Pending</span></td></tr>
+          <tr><td><span class="cell-sub">CLM-2026-0339</span></td><td>Emeka Obi</td><td>LUTH</td><td>Dialysis — 3 sessions</td><td class="amount mid">₦120,000</td><td><span class="badge approved">Approved</span></td></tr>
+          <tr><td><span class="cell-sub">CLM-2026-0338</span></td><td>Fatima Bello</td><td>St. Nicholas</td><td>C-section delivery</td><td class="amount high">₦285,000</td><td><span class="badge escalated">Escalated</span></td></tr>
+          <tr><td><span class="cell-sub">CLM-2026-0337</span></td><td>Akin Fashola</td><td>Eko Hospital</td><td>MRI scan — spine</td><td class="amount mid">₦95,000</td><td><span class="badge rejected">Rejected</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://dominicyogi.github.io/agentflow-widget/phantom/widget.js"
+  data-api-key="af_live_d774d3e7f6b24b19"
+  data-theme="red"></script>
+<script src="shared.js"></script>
+<script>
+  loadData();
+  updateNavBadges();
+</script>
+</body>
+</html>
