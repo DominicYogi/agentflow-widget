@@ -1045,15 +1045,26 @@
           }
 
         } else if (action.type === "navigate") {
-          // Save any actions that come AFTER this navigate so the next page can pick them up
+          // Save intent-based continuation so the next page can re-plan with fresh element IDs.
+          // We do NOT save the raw remaining actions — those carry afIds/elementIds that belong
+          // to THIS page and will not exist on the destination page.
           const remaining = actions.slice(i + 1);
           if (remaining.length > 0) {
             savePendingContinuation({
-              actions:         remaining,
               originalCommand: pendingPlan?.originalCommand || "",
               taskType:        pendingPlan?.taskType        || "task",
-              fromPage:        document.title,
-              fromUrl:         window.location.href
+              // Describe what was already done so the AI has context
+              stepsCompleted:  actions.slice(0, i)
+                                 .map(a => a.description).filter(Boolean),
+              // Describe what still needs to happen — natural language, no element refs
+              stepsRemaining:  remaining.map(a => ({
+                description: a.description,
+                type:        a.type,
+                value:       a.value       || null,
+                elementId:   a.elementId   || null   // kept for static/known IDs only
+              })),
+              fromPage: document.title,
+              fromUrl:  window.location.href
             });
           }
           results.push({ ok: true, msg: `🔗 Navigating to <strong>${action.description}</strong>…` });
@@ -1448,14 +1459,14 @@
       const continuation = loadPendingContinuation();
       if (continuation) {
         clearPendingContinuation();
-        // Give the new page's JS a moment to finish rendering
-        await sleep(800);
+        // Give the new page's JS a full moment to finish rendering before we scan it
+        await sleep(1400);
         addMsg("agent",
-          `⚡ Continuing your task from <strong>${escHtml(continuation.fromPage)}</strong>…`
+          `⚡ Resuming task on <strong>${escHtml(document.title)}</strong>…`
         );
-        await sleep(400);
+        await sleep(300);
         pendingPlan = { originalCommand: continuation.originalCommand, taskType: continuation.taskType };
-        await executeActions(continuation.actions);
+        await resumeContinuation(continuation);
         pendingPlan = null;
       }
 
@@ -1466,6 +1477,80 @@
       clearMessages();
       addMsg("error", "⚠️ Could not connect to AgentFlow backend.", false);
       console.error("AgentFlow init:", err);
+    }
+  }
+
+  // ── Cross-page task resume ────────────────────────────
+  // Called on the NEW page after a navigate action.
+  // Re-asks the AI with the original intent + fresh page scan so it can
+  // produce a new action plan with valid element IDs for this page.
+  async function resumeContinuation(cont) {
+    const completedPart = cont.stepsCompleted?.length
+      ? `Steps already completed: ${cont.stepsCompleted.join('; ')}. `
+      : '';
+
+    const remainingPart = cont.stepsRemaining?.length
+      ? cont.stepsRemaining.map(s => s.description).filter(Boolean).join(', ')
+      : cont.originalCommand;
+
+    // This message is sent to the AI but not shown to the user as a bubble
+    const resumeMsg =
+      `[CONTINUATION] Original task: "${cont.originalCommand}". ` +
+      `${completedPart}` +
+      `Now on a new page — please continue with: ${remainingPart}.`;
+
+    setInputLocked(true);
+    const thinking = addMsg("thinking", "🧠 Replanning for this page…", false);
+
+    try {
+      const pageContext    = scanPage();
+      const historyForAI  = conversationHistory.slice(-16).map(m => ({
+        role:    m.type === "user" ? "user" : "assistant",
+        content: m.html.replace(/<[^>]+>/g, "").slice(0, 400)
+      }));
+
+      const res = await fetch(BACKEND_URL + "/api/agent/message", {
+        method: "POST",
+        headers: {
+          "x-api-key": API_KEY,
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
+        },
+        body: JSON.stringify({
+          message:        resumeMsg,
+          pageContext,
+          history:        historyForAI,
+          isContinuation: true
+        })
+      });
+
+      thinking.remove();
+      if (!res.ok) throw new Error("Backend error " + res.status);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Unknown error");
+
+      const response = data.response;
+
+      if (response.type === "task" && response.plan?.actions?.length > 0) {
+        // Auto-execute — the user already confirmed this task on the previous page.
+        // Show a brief one-line summary so they can see what's happening, then run it.
+        response.plan.originalCommand = cont.originalCommand;
+        const summary = response.reply?.split("\n")[0] || "Executing next steps…";
+        addMsg("agent", "▶ " + escHtml(summary));
+        await sleep(350);
+        await executeActions(response.plan.actions);
+      } else if (response.type === "chat") {
+        addMsg("agent", response.reply);
+      } else {
+        addMsg("agent", response.reply || "Done.");
+      }
+
+    } catch (err) {
+      if (thinking.parentNode) thinking.remove();
+      addMsg("error", "⚠️ Could not resume the task on this page. Please try again.");
+      console.error("Continuation resume error:", err);
+    } finally {
+      setInputLocked(false);
     }
   }
 
