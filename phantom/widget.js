@@ -1473,6 +1473,10 @@
       // Silently learn this page in the background
       autoLearnPage();
 
+      // Crawl all other same-origin pages so the bot knows the full site
+      // immediately — without waiting for a human to visit each page.
+      crawlAndLearnSite();
+
     } catch (err) {
       clearMessages();
       addMsg("error", "⚠️ Could not connect to AgentFlow backend.", false);
@@ -1599,13 +1603,13 @@
 
   async function autoLearnPage() {
     try {
-      const pageData   = scanPage();
-      const url        = window.location.href;
+      const pageData    = scanPage();
+      const url         = window.location.href;
       const fingerprint = pageData.buttons.length + ":" + pageData.inputs.length + ":" + pageData.links.length;
 
-      const cache      = getLearnCache();
-      const cached     = cache[url];
-      const now        = Date.now();
+      const cache  = getLearnCache();
+      const cached = cache[url];
+      const now    = Date.now();
 
       // Skip if same fingerprint seen within TTL
       if (cached && cached.fp === fingerprint && (now - cached.ts) < LEARN_TTL_MS) return;
@@ -1632,6 +1636,148 @@
 
     } catch (e) {
       // Completely silent — auto-learn should never affect the user experience
+    }
+  }
+
+  // ── Background site crawler ───────────────────────────
+  // Runs once per week (controlled by CRAWL_CACHE_KEY in localStorage).
+  // Collects every same-origin link visible on the current page, fetches
+  // each one as raw HTML, parses it with DOMParser, and sends the extracted
+  // page data to /api/agent/learn-page — so all pages are known to the bot
+  // the moment the script tag is added, without waiting for a human to visit them.
+  // Requests are staggered 600 ms apart to stay gentle on the server.
+  const CRAWL_CACHE_KEY = "af_crawled_" + API_KEY;
+  const CRAWL_TTL_MS    = 7 * 24 * 60 * 60 * 1000; // re-crawl after 7 days
+  const CRAWL_MAX_PAGES = 30;                        // hard cap per crawl run
+  const CRAWL_DELAY_MS  = 600;                       // ms between fetches
+
+  // Mirrors scanPage() but operates on a fetched Document instead of the live DOM.
+  function scanDocument(doc, url) {
+    let afCounter = 0;
+    function nextId() { return "af-crawl-" + (++afCounter); }
+
+    const buttons = Array.from(
+      doc.querySelectorAll("button, input[type=button], input[type=submit], [role=button], a.btn, a.button")
+    ).slice(0, 40).map(el => ({
+      afId:     nextId(),
+      id:       el.id || "",
+      text:     (el.textContent || el.value || "").trim().slice(0, 80),
+      disabled: el.disabled || el.getAttribute("aria-disabled") === "true"
+    })).filter(b => b.text);
+
+    const inputs = Array.from(
+      doc.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea")
+    ).slice(0, 40).map(el => {
+      let label = "";
+      if (el.id) {
+        const lbl = doc.querySelector(`label[for="${el.id}"]`);
+        if (lbl) label = lbl.textContent.trim();
+      }
+      if (!label) label = el.getAttribute("aria-label") || el.placeholder || el.name || "";
+      return { afId: nextId(), id: el.id || "", type: el.type || el.tagName.toLowerCase(), label: label.slice(0, 80), value: "" };
+    });
+
+    const links = Array.from(doc.querySelectorAll("a[href]"))
+      .slice(0, 60)
+      .map(el => ({
+        afId: nextId(),
+        text: (el.textContent || "").trim().slice(0, 60),
+        href: el.getAttribute("href") || ""
+      }))
+      .filter(l => l.text && l.text.length > 1);
+
+    const headings = Array.from(doc.querySelectorAll("h1,h2,h3"))
+      .slice(0, 15).map(el => el.textContent.trim());
+
+    return {
+      pageTitle: doc.title || new URL(url).pathname,
+      url, buttons, inputs, links, headings, tables: []
+    };
+  }
+
+  // Returns all unique same-origin page URLs linked from the current live page.
+  function collectInternalLinks() {
+    const origin = window.location.origin;
+    const seen   = new Set([window.location.href]);
+    const urls   = [];
+
+    document.querySelectorAll("a[href]").forEach(a => {
+      try {
+        const resolved = new URL(a.getAttribute("href"), window.location.href).href;
+        if (
+          resolved.startsWith(origin) &&
+          !resolved.includes("#") &&
+          !/\.(pdf|zip|png|jpg|jpeg|gif|svg|csv|xlsx|docx|mp4|mp3)(\?|$)/i.test(resolved) &&
+          !seen.has(resolved)
+        ) {
+          seen.add(resolved);
+          urls.push(resolved);
+        }
+      } catch {}
+    });
+
+    return urls.slice(0, CRAWL_MAX_PAGES);
+  }
+
+  async function crawlAndLearnSite() {
+    try {
+      // Only run if the last full crawl is older than CRAWL_TTL_MS
+      const crawlRaw  = localStorage.getItem(CRAWL_CACHE_KEY);
+      const crawlMeta = crawlRaw ? JSON.parse(crawlRaw) : {};
+      const now       = Date.now();
+      if (crawlMeta.ts && (now - crawlMeta.ts) < CRAWL_TTL_MS) return;
+
+      const links = collectInternalLinks();
+      if (!links.length) return;
+
+      // Stamp immediately so other tabs don't start a parallel crawl
+      localStorage.setItem(CRAWL_CACHE_KEY, JSON.stringify({ ts: now, running: true }));
+
+      const parser     = new DOMParser();
+      const learnCache = getLearnCache();
+
+      for (const url of links) {
+        try {
+          // Skip pages already fresh in the learn cache
+          const cached = learnCache[url];
+          if (cached && (now - cached.ts) < LEARN_TTL_MS) continue;
+
+          const res = await fetch(url, { credentials: "same-origin" });
+          if (!res.ok) continue;
+
+          const html = await res.text();
+          const doc  = parser.parseFromString(html, "text/html");
+
+          // Anchor relative URLs inside the fetched doc to its own URL
+          const base = doc.createElement("base");
+          base.href  = url;
+          doc.head.prepend(base);
+
+          const pageData    = scanDocument(doc, url);
+          const pageText    = (doc.body?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 1000);
+          const fingerprint = pageData.buttons.length + ":" + pageData.inputs.length + ":" + pageData.links.length;
+
+          await fetch(BACKEND_URL + "/api/agent/learn-page", {
+            method:  "POST",
+            headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
+            body:    JSON.stringify({ pageData, url, pageText })
+          });
+
+          // Record in the shared learn cache so autoLearnPage skips it on next real visit
+          learnCache[url] = { fp: fingerprint, ts: now };
+          setLearnCache(learnCache);
+
+        } catch {}
+
+        // Stagger requests — wait before fetching the next page
+        await new Promise(r => setTimeout(r, CRAWL_DELAY_MS));
+      }
+
+      // Mark crawl complete
+      localStorage.setItem(CRAWL_CACHE_KEY, JSON.stringify({ ts: now, running: false }));
+
+    } catch {
+      // Completely silent — never disrupts the user
     }
   }
 
