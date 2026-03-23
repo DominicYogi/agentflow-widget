@@ -1422,6 +1422,26 @@
   // ── Init ──────────────────────────────────────────────
   async function init() {
     try {
+      // ── One-time stale cache bust ──────────────────────
+      // If any previously-crawled pages were stored with 0 buttons + 0 inputs
+      // (i.e., the old fetch+DOMParser approach produced empty data), wipe those
+      // entries from both the learn cache and crawl record so the iframe crawler
+      // picks them up again immediately on this load.
+      (function bustEmptyLearnCache() {
+        try {
+          const lc      = getLearnCache();
+          const changed = Object.keys(lc).filter(url => /^0:0:/.test(lc[url]?.fp || ""));
+          if (!changed.length) return;
+          changed.forEach(url => delete lc[url]);
+          setLearnCache(lc);
+          const raw = localStorage.getItem(CRAWL_CACHE_KEY);
+          if (raw) {
+            const cr = JSON.parse(raw);
+            changed.forEach(url => delete cr[url]);
+            localStorage.setItem(CRAWL_CACHE_KEY, JSON.stringify(cr));
+          }
+        } catch {}
+      }());
       const res  = await fetch(BACKEND_URL + "/api/agent/status", {
         headers: { "x-api-key": API_KEY, "ngrok-skip-browser-warning": "true" }
       });
@@ -1473,8 +1493,8 @@
       // Silently learn this page in the background
       autoLearnPage();
 
-      // Crawl all other same-origin pages so the bot knows the full site
-      // immediately — without waiting for a human to visit each page.
+      // Crawl all other linked same-origin pages via hidden iframes so
+      // the bot knows the full site from the moment the script tag is added.
       crawlAndLearnSite();
 
     } catch (err) {
@@ -1639,68 +1659,29 @@
     }
   }
 
-  // ── Background site crawler ───────────────────────────
-  // Runs once per week (controlled by CRAWL_CACHE_KEY in localStorage).
-  // Collects every same-origin link visible on the current page, fetches
-  // each one as raw HTML, parses it with DOMParser, and sends the extracted
-  // page data to /api/agent/learn-page — so all pages are known to the bot
-  // the moment the script tag is added, without waiting for a human to visit them.
-  // Requests are staggered 600 ms apart to stay gentle on the server.
+  // ── Background site crawler (iframe-based) ────────────
+  //
+  // WHY IFRAMES, NOT fetch+DOMParser:
+  //   fetch() + DOMParser only parses raw static HTML — JavaScript never runs,
+  //   so dynamically-rendered buttons and inputs are invisible.
+  //   A hidden same-origin iframe loads the page in a real browser context:
+  //   scripts execute, frameworks render, and contentDocument reflects the live DOM
+  //   — exactly what scanPage() sees when a user visits manually.
+  //
+  // Runs once per week (CRAWL_TTL_MS). On every load it checks whether any
+  // previously-crawled page came back empty (0 btn + 0 fields) and re-queues those,
+  // so a stale bad-data entry never stays forever.
   const CRAWL_CACHE_KEY = "af_crawled_" + API_KEY;
-  const CRAWL_TTL_MS    = 7 * 24 * 60 * 60 * 1000; // re-crawl after 7 days
-  const CRAWL_MAX_PAGES = 30;                        // hard cap per crawl run
-  const CRAWL_DELAY_MS  = 600;                       // ms between fetches
+  const CRAWL_TTL_MS    = 7 * 24 * 60 * 60 * 1000; // full re-crawl after 7 days
+  const CRAWL_MAX_PAGES = 30;                        // hard cap per run
+  const CRAWL_DELAY_MS  = 1200;                      // ms between iframes (let each page settle)
+  const IFRAME_LOAD_MS  = 3000;                      // ms to wait after onload for JS to render
 
-  // Mirrors scanPage() but operates on a fetched Document instead of the live DOM.
-  function scanDocument(doc, url) {
-    let afCounter = 0;
-    function nextId() { return "af-crawl-" + (++afCounter); }
-
-    const buttons = Array.from(
-      doc.querySelectorAll("button, input[type=button], input[type=submit], [role=button], a.btn, a.button")
-    ).slice(0, 40).map(el => ({
-      afId:     nextId(),
-      id:       el.id || "",
-      text:     (el.textContent || el.value || "").trim().slice(0, 80),
-      disabled: el.disabled || el.getAttribute("aria-disabled") === "true"
-    })).filter(b => b.text);
-
-    const inputs = Array.from(
-      doc.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea")
-    ).slice(0, 40).map(el => {
-      let label = "";
-      if (el.id) {
-        const lbl = doc.querySelector(`label[for="${el.id}"]`);
-        if (lbl) label = lbl.textContent.trim();
-      }
-      if (!label) label = el.getAttribute("aria-label") || el.placeholder || el.name || "";
-      return { afId: nextId(), id: el.id || "", type: el.type || el.tagName.toLowerCase(), label: label.slice(0, 80), value: "" };
-    });
-
-    const links = Array.from(doc.querySelectorAll("a[href]"))
-      .slice(0, 60)
-      .map(el => ({
-        afId: nextId(),
-        text: (el.textContent || "").trim().slice(0, 60),
-        href: el.getAttribute("href") || ""
-      }))
-      .filter(l => l.text && l.text.length > 1);
-
-    const headings = Array.from(doc.querySelectorAll("h1,h2,h3"))
-      .slice(0, 15).map(el => el.textContent.trim());
-
-    return {
-      pageTitle: doc.title || new URL(url).pathname,
-      url, buttons, inputs, links, headings, tables: []
-    };
-  }
-
-  // Returns all unique same-origin page URLs linked from the current live page.
+  // Collects all unique same-origin page URLs linked from the current live page.
   function collectInternalLinks() {
     const origin = window.location.origin;
     const seen   = new Set([window.location.href]);
     const urls   = [];
-
     document.querySelectorAll("a[href]").forEach(a => {
       try {
         const resolved = new URL(a.getAttribute("href"), window.location.href).href;
@@ -1715,46 +1696,124 @@
         }
       } catch {}
     });
-
     return urls.slice(0, CRAWL_MAX_PAGES);
+  }
+
+  // Loads a same-origin URL in a tiny hidden iframe, waits for JS to render,
+  // then scans and returns the live contentDocument data.
+  // Returns null on timeout or cross-origin error.
+  function crawlPageWithIframe(url) {
+    return new Promise(resolve => {
+      let done = false;
+      const finish = result => {
+        if (done) return;
+        done = true;
+        try { iframe.remove(); } catch {}
+        resolve(result);
+      };
+
+      const iframe = document.createElement("iframe");
+      iframe.setAttribute("aria-hidden", "true");
+      iframe.style.cssText = [
+        "position:fixed", "top:-9999px", "left:-9999px",
+        "width:1px", "height:1px", "opacity:0",
+        "pointer-events:none", "border:none", "z-index:-1"
+      ].join(";");
+
+      // Hard timeout — give up after 12 s total
+      const hardTimer = setTimeout(() => finish(null), 12000);
+
+      iframe.onload = () => {
+        // Wait IFRAME_LOAD_MS after onload so in-page JS (React, Vue, etc.) can render
+        setTimeout(() => {
+          clearTimeout(hardTimer);
+          try {
+            const doc = iframe.contentDocument || iframe.contentWindow.document;
+            if (!doc || !doc.body) return finish(null);
+
+            // Re-use the same extraction logic as scanPage(), but on the iframe doc
+            let ctr = 0;
+            const nid = () => "afc-" + (++ctr);
+
+            const buttons = Array.from(
+              doc.querySelectorAll("button, input[type=button], input[type=submit], [role=button], a.btn, a.button")
+            ).slice(0, 40).map(el => ({
+              afId: nid(), id: el.id || "",
+              text: (el.innerText || el.value || el.textContent || "").trim().slice(0, 80),
+              disabled: el.disabled || el.getAttribute("aria-disabled") === "true"
+            })).filter(b => b.text);
+
+            const inputs = Array.from(
+              doc.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea")
+            ).slice(0, 40).map(el => {
+              let label = "";
+              if (el.id) {
+                const lbl = doc.querySelector(`label[for="${el.id}"]`);
+                if (lbl) label = lbl.textContent.trim();
+              }
+              if (!label) label = el.getAttribute("aria-label") || el.placeholder || el.name || "";
+              return { afId: nid(), id: el.id || "", type: el.type || el.tagName.toLowerCase(), label: label.slice(0, 80), value: "" };
+            });
+
+            const links = Array.from(doc.querySelectorAll("a[href]"))
+              .slice(0, 60)
+              .map(el => ({ afId: nid(), text: (el.textContent || "").trim().slice(0, 60), href: el.getAttribute("href") || "" }))
+              .filter(l => l.text && l.text.length > 1);
+
+            const headings = Array.from(doc.querySelectorAll("h1,h2,h3"))
+              .slice(0, 15).map(el => el.textContent.trim());
+
+            finish({
+              pageData: { pageTitle: doc.title || new URL(url).pathname, url, buttons, inputs, links, headings, tables: [] },
+              pageText: (doc.body.innerText || doc.body.textContent || "").slice(0, 1000)
+            });
+          } catch {
+            finish(null); // cross-origin or other error
+          }
+        }, IFRAME_LOAD_MS);
+      };
+
+      iframe.onerror = () => { clearTimeout(hardTimer); finish(null); };
+
+      document.body.appendChild(iframe);
+      iframe.src = url;
+    });
   }
 
   async function crawlAndLearnSite() {
     try {
-      // Only run if the last full crawl is older than CRAWL_TTL_MS
-      const crawlRaw  = localStorage.getItem(CRAWL_CACHE_KEY);
-      const crawlMeta = crawlRaw ? JSON.parse(crawlRaw) : {};
-      const now       = Date.now();
-      if (crawlMeta.ts && (now - crawlMeta.ts) < CRAWL_TTL_MS) return;
+      const now        = Date.now();
+      const learnCache = getLearnCache();
 
+      // Collect links first — bail early if nothing to do
       const links = collectInternalLinks();
       if (!links.length) return;
 
-      // Stamp immediately so other tabs don't start a parallel crawl
-      localStorage.setItem(CRAWL_CACHE_KEY, JSON.stringify({ ts: now, running: true }));
+      // Decide which URLs need crawling:
+      //   (a) never crawled, OR
+      //   (b) TTL expired, OR
+      //   (c) previously crawled but stored with 0 buttons AND 0 inputs (bad empty data)
+      const crawlRaw    = localStorage.getItem(CRAWL_CACHE_KEY);
+      const crawlRecord = crawlRaw ? JSON.parse(crawlRaw) : {};
 
-      const parser     = new DOMParser();
-      const learnCache = getLearnCache();
+      const toCrawl = links.filter(url => {
+        const cc = crawlRecord[url];
+        if (!cc) return true;                                    // never crawled
+        if ((now - cc.ts) >= CRAWL_TTL_MS) return true;         // TTL expired
+        const lc = learnCache[url];
+        if (lc && lc.fp === "0:0:0") return true;               // stored empty — retry
+        if (lc && /^0:0:/.test(lc.fp)) return true;             // 0 btn + 0 inputs — retry
+        return false;
+      });
 
-      for (const url of links) {
+      if (!toCrawl.length) return;
+
+      for (const url of toCrawl) {
         try {
-          // Skip pages already fresh in the learn cache
-          const cached = learnCache[url];
-          if (cached && (now - cached.ts) < LEARN_TTL_MS) continue;
+          const result = await crawlPageWithIframe(url);
+          if (!result) continue;
 
-          const res = await fetch(url, { credentials: "same-origin" });
-          if (!res.ok) continue;
-
-          const html = await res.text();
-          const doc  = parser.parseFromString(html, "text/html");
-
-          // Anchor relative URLs inside the fetched doc to its own URL
-          const base = doc.createElement("base");
-          base.href  = url;
-          doc.head.prepend(base);
-
-          const pageData    = scanDocument(doc, url);
-          const pageText    = (doc.body?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 1000);
+          const { pageData, pageText } = result;
           const fingerprint = pageData.buttons.length + ":" + pageData.inputs.length + ":" + pageData.links.length;
 
           await fetch(BACKEND_URL + "/api/agent/learn-page", {
@@ -1763,18 +1822,19 @@
             body:    JSON.stringify({ pageData, url, pageText })
           });
 
-          // Record in the shared learn cache so autoLearnPage skips it on next real visit
+          // Update learn cache so autoLearnPage skips this URL on the user's next real visit
           learnCache[url] = { fp: fingerprint, ts: now };
           setLearnCache(learnCache);
 
+          // Record this crawl attempt
+          crawlRecord[url] = { ts: now };
+          localStorage.setItem(CRAWL_CACHE_KEY, JSON.stringify(crawlRecord));
+
         } catch {}
 
-        // Stagger requests — wait before fetching the next page
+        // Stagger iframes — avoids UI jank and backend hammering
         await new Promise(r => setTimeout(r, CRAWL_DELAY_MS));
       }
-
-      // Mark crawl complete
-      localStorage.setItem(CRAWL_CACHE_KEY, JSON.stringify({ ts: now, running: false }));
 
     } catch {
       // Completely silent — never disrupts the user
