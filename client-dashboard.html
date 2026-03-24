@@ -347,15 +347,6 @@
       color: var(--muted);
     }
 
-    .usage-section {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 28px;
-      margin-bottom: 24px;
-      animation: fadeUp 0.4s 0.25s ease both;
-    }
-
     .section-title {
       font-family: 'Syne', sans-serif;
       font-size: 16px;
@@ -375,46 +366,6 @@
       padding: 3px 10px;
       border-radius: 100px;
       letter-spacing: 0.05em;
-    }
-
-    .usage-bar-wrap { margin-bottom: 12px; }
-
-    .usage-bar-labels {
-      display: flex;
-      justify-content: space-between;
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
-
-    .usage-bar-labels strong { color: var(--text); }
-
-    .usage-bar-track {
-      height: 8px;
-      background: var(--surface);
-      border-radius: 100px;
-      overflow: hidden;
-    }
-
-    .usage-bar-fill {
-      height: 100%;
-      border-radius: 100px;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      transition: width 1s cubic-bezier(0.4,0,0.2,1);
-      position: relative;
-    }
-
-    .usage-bar-fill::after {
-      content: '';
-      position: absolute;
-      right: 0; top: 0; bottom: 0;
-      width: 40px;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15));
-      animation: shimmer 2s infinite;
-    }
-
-    @keyframes shimmer {
-      0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; }
     }
 
     .plan-pills {
@@ -774,7 +725,6 @@
       <div class="stat-card">
         <div class="stat-label">Plan</div>
         <div class="stat-value purple" id="stat-plan">—</div>
-        <div class="stat-sub" id="stat-plan-limit">— tasks/month</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Status</div>
@@ -874,7 +824,6 @@
   }
 
   // FIX 3: Added refreshClientStats() — fetches live data from /status endpoint
-  // so tasksUsed, tasksRemaining, and tasksLimit are always current
   async function refreshClientStats(baseClient) {
     try {
       const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
@@ -888,13 +837,10 @@
         // Merge fresh stats into the base client object
         const merged = {
           ...baseClient,
-          tasksUsed:      data.client.tasksUsed,
-          tasksLimit:     data.client.tasksLimit,
-          tasksRemaining: data.client.tasksRemaining,
-          status:         data.client.status,
-          plan:           data.client.plan,
-          industry:       data.client.industry,
-          name:           data.client.name
+          status:   data.client.status,
+          plan:     data.client.plan,
+          industry: data.client.industry,
+          name:     data.client.name
         };
         clientData = merged;
         sessionStorage.setItem("af_client_session", JSON.stringify(merged));
@@ -902,10 +848,8 @@
         return;
       }
     } catch (e) {
-      // If status fetch fails, fall back to login data
       console.warn("Could not refresh stats:", e.message);
     }
-    // Fallback: render with whatever we have from login
     renderDashboard(baseClient);
   }
 
@@ -921,18 +865,8 @@
     document.getElementById("header-plan-info").textContent =
       `${client.plan || "—"} Plan · ${client.industry || "—"} · ${client.status === "active" ? "Active subscription" : client.status === "trial" ? "Trial" : "Inactive"}`;
 
-    // FIX 4: Compute tasksRemaining defensively in case it's missing from the object
-    const tasksUsed      = Number(client.tasksUsed)      || 0;
-    const tasksLimit     = Number(client.tasksLimit)      || 0;
-    const tasksRemaining = client.tasksRemaining != null
-      ? Number(client.tasksRemaining)
-      : Math.max(0, tasksLimit - tasksUsed);
-
     // Stats
-    document.getElementById("stat-used").textContent      = tasksUsed.toLocaleString();
-    document.getElementById("stat-remaining").textContent = tasksRemaining.toLocaleString();
-    document.getElementById("stat-plan").textContent      = client.plan || "—";
-    document.getElementById("stat-plan-limit").textContent = `${tasksLimit.toLocaleString()} tasks/month`;
+    document.getElementById("stat-plan").textContent = client.plan || "—";
 
     const statusText  = client.status === "active" ? "Active" : client.status === "trial" ? "Trial" : "Inactive";
     const statusColor = client.status === "active" ? "green" : client.status === "trial" ? "orange" : "";
@@ -940,15 +874,6 @@
     statusEl.textContent = statusText;
     statusEl.className   = `stat-value ${statusColor}`;
     document.getElementById("stat-industry").textContent = client.industry || "—";
-
-    // Usage bar — FIX 5: guard against tasksLimit=0 to avoid NaN/Infinity
-    const pct = tasksLimit > 0 ? Math.min(100, Math.round((tasksUsed / tasksLimit) * 100)) : 0;
-    document.getElementById("usage-pct-badge").textContent = `${pct}% used`;
-    document.getElementById("bar-used").textContent        = tasksUsed.toLocaleString();
-    document.getElementById("bar-limit").textContent       = tasksLimit.toLocaleString();
-    setTimeout(() => {
-      document.getElementById("usage-bar-fill").style.width = `${pct}%`;
-    }, 100);
 
     // Plan pills
     const planInfo = {

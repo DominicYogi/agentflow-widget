@@ -116,14 +116,6 @@
     #af-close { cursor:pointer; font-size:18px; opacity:0.75; }
     #af-close:hover { opacity:1; }
 
-    #af-usage {
-      background: ${theme.light}; padding: 7px 16px; font-size: 11px; color: ${theme.primary};
-      display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 1px solid #e4e4e4; flex-shrink: 0;
-    }
-    .af-bar { width: 100px; height: 4px; background: #ddd; border-radius: 2px; }
-    .af-bar-fill { height:100%; background: ${theme.primary}; border-radius:2px; transition: width 0.5s; }
-
     #af-messages {
       flex: 1; padding: 14px 14px 20px; overflow-y: auto; background: #f7f8fa;
       display: flex; flex-direction: column; gap: 10px; min-height: 200px;
@@ -454,10 +446,6 @@
       </div>
     </div>
 
-    <div id="af-usage">
-      <span id="af-usage-text">Loading...</span>
-      <div class="af-bar"><div class="af-bar-fill" id="af-bar-fill" style="width:0%"></div></div>
-    </div>
     <div id="af-messages">
       <div class="af-msg thinking">Connecting to your AI agent...</div>
     </div>
@@ -541,12 +529,6 @@
     });
     msgs.scrollTop = msgs.scrollHeight;
     return true;
-  }
-
-  function updateUsage(used, limit) {
-    const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
-    document.getElementById("af-usage-text").textContent = used + " / " + limit + " tasks used";
-    document.getElementById("af-bar-fill").style.width   = pct + "%";
   }
 
   // ════════════════════════════════════════════════════════
@@ -1453,7 +1435,6 @@
       }
       clientInfo = data.client;
       document.getElementById("af-client-name").textContent = clientInfo.name;
-      updateUsage(clientInfo.tasksUsed, clientInfo.tasksLimit);
 
       const session = loadSession();
       if (session?.history?.length > 0) {
