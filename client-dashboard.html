@@ -290,7 +290,7 @@
 
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 16px;
       margin-bottom: 32px;
     }
@@ -772,16 +772,6 @@
 
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-label">Tasks Used</div>
-        <div class="stat-value green" id="stat-used">—</div>
-        <div class="stat-sub">this billing period</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Tasks Remaining</div>
-        <div class="stat-value" id="stat-remaining">—</div>
-        <div class="stat-sub">until next reset</div>
-      </div>
-      <div class="stat-card">
         <div class="stat-label">Plan</div>
         <div class="stat-value purple" id="stat-plan">—</div>
         <div class="stat-sub" id="stat-plan-limit">— tasks/month</div>
@@ -793,22 +783,6 @@
       </div>
     </div>
 
-    <div class="usage-section">
-      <div class="section-title">
-        Usage This Period
-        <span class="badge" id="usage-pct-badge">0%</span>
-      </div>
-      <div class="usage-bar-wrap">
-        <div class="usage-bar-labels">
-          <span><strong id="bar-used">0</strong> tasks used</span>
-          <span><strong id="bar-limit">0</strong> total</span>
-        </div>
-        <div class="usage-bar-track">
-          <div class="usage-bar-fill" id="usage-bar-fill" style="width: 0%"></div>
-        </div>
-      </div>
-      <div class="plan-pills" id="plan-pills"></div>
-    </div>
 
     <div class="embed-section">
       <div class="section-title">Your Embed Code</div>
@@ -986,7 +960,6 @@
     document.getElementById("plan-pills").innerHTML = `
       <div class="plan-pill"><span class="icon">${info.icon}</span><span class="pill-label">Plan:</span><span class="pill-val">${client.plan || "—"}</span></div>
       <div class="plan-pill"><span class="icon">💳</span><span class="pill-label">Price:</span><span class="pill-val">${info.price}</span></div>
-      <div class="plan-pill"><span class="icon">📊</span><span class="pill-label">Tasks:</span><span class="pill-val">${tasksUsed.toLocaleString()} / ${tasksLimit.toLocaleString()}</span></div>
       <div class="plan-pill"><span class="icon">🏭</span><span class="pill-label">Industry:</span><span class="pill-val">${client.industry || "—"}</span></div>
     `;
 
