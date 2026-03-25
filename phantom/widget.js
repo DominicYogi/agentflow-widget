@@ -437,7 +437,7 @@
         <span>📁 Files</span>
         <span class="af-fp-close" id="af-fp-close">✕</span>
       </div>
-      <div class="af-fp-notice">⚠️ Files are stored temporarily in your browser only</div>
+      <div class=\"af-fp-notice\" style=\"background:#e8f5e9;border-color:#c8e6c9;color:#2e7d32;\">☁️ Files are stored in Cloudflare R2 — available for re-download anytime</div>
       <div class="af-fp-list" id="af-fp-list">
         <div class="af-fp-empty">No files yet. Send or receive a file to see it here.</div>
       </div>
@@ -643,19 +643,16 @@
     catch (e) { console.warn("localStorage full — files not saved", e); }
   }
 
-  function storeFile(name, dataUrl, mimeType, direction) {
-    const files = loadStoredFiles();
-    const already = files.findIndex(function(f) { return f.name === name && f.direction === direction; });
-    const entry = {
-      name: name, dataUrl: dataUrl, mimeType: mimeType, direction: direction,
-      time: Date.now(),
-      size: Math.round((dataUrl.length * 3) / 4)
-    };
-    if (already >= 0) files[already] = entry;
-    else files.unshift(entry);
-    saveStoredFiles(files);
-    updateFilesBadge();
-  }
+  function storeFile(name, url, mimeType, direction, size) {
+  const files = loadStoredFiles();
+  const already = files.findIndex(function(f) { return f.name === name && f.direction === direction; });
+  const entry = { name: name, url: url, mimeType: mimeType, direction: direction,
+                  time: Date.now(), size: size || 0 };
+  if (already >= 0) files[already] = entry;
+  else files.unshift(entry);
+  saveStoredFiles(files);
+  updateFilesBadge();
+}
 
   function updateFilesBadge() {
     const files  = loadStoredFiles();
@@ -714,12 +711,13 @@
   }
 
   window.afDownloadFile = function(idx) {
-    const files = loadStoredFiles();
-    const f = files[idx];
-    if (!f) return;
-    const a = document.createElement("a");
-    a.href = f.dataUrl; a.download = f.name; a.click();
-  };
+  const files = loadStoredFiles();
+  const f = files[idx];
+  if (!f || !f.url) return;
+  const downloadUrl = BACKEND_URL + f.url + "?key=" + encodeURIComponent(API_KEY);
+  const a = document.createElement("a");
+  a.href = downloadUrl; a.download = f.name; a.target = "_blank"; a.click();
+};
 
   // ── Wire up files panel toggle ─────────────────────────
   document.getElementById("af-files-btn").addEventListener("click", function() {
@@ -1132,35 +1130,34 @@
 
     // Download buttons for any files produced
     if (downloadables && downloadables.length > 0) {
-      downloadables.forEach(dl => {
-        // Save to localStorage files panel
-        storeFile(dl.filename, dl.dataUrl, dl.mimeType || "application/octet-stream", "received");
+  downloadables.forEach(dl => {
+    // Store lightweight metadata — no file bytes in the browser
+    storeFile(dl.filename, dl.url || "", dl.mimeType || "application/octet-stream", "received", dl.size || 0);
 
-        // Render download card in chat
-        const ext    = dl.filename.split(".").pop().toLowerCase();
-        const icons  = { pdf:"📄", doc:"📝", docx:"📝", txt:"📋", csv:"📊", xlsx:"📊", xls:"📊", default:"📁" };
-        const icon   = icons[ext] || icons.default;
-        const approxBytes = Math.round((dl.dataUrl.length * 3) / 4);
-        const card = document.createElement("div");
-        card.className = "af-download-card";
-        card.innerHTML =
-          "<div class=\"af-dl-label\">📥 File ready</div>" +
-          "<div class=\"af-dl-file\">" +
-            "<span class=\"af-dl-icon\">" + icon + "</span>" +
-            "<div class=\"af-dl-info\">" +
-              "<div class=\"af-dl-name\">" + escHtml(dl.filename) + "</div>" +
-              "<div class=\"af-dl-size\">" + formatBytes(approxBytes) + "</div>" +
-            "</div>" +
-            "<button class=\"af-dl-btn\">↓ Download</button>" +
-          "</div>";
-        card.querySelector(".af-dl-btn").addEventListener("click", () => {
-          const a = document.createElement("a");
-          a.href = dl.dataUrl; a.download = dl.filename; a.click();
-        });
-        msgs.appendChild(card);
-      });
-      updateFilesBadge();
-    }
+    const ext   = dl.filename.split(".").pop().toLowerCase();
+    const icons = { pdf:"📄", doc:"📝", docx:"📝", txt:"📋", csv:"📊", xlsx:"📊", xls:"📊", default:"📁" };
+    const icon  = icons[ext] || icons.default;
+    const card  = document.createElement("div");
+    card.className = "af-download-card";
+    card.innerHTML =
+      "<div class=\"af-dl-label\">📥 File ready</div>" +
+      "<div class=\"af-dl-file\">" +
+        "<span class=\"af-dl-icon\">" + icon + "</span>" +
+        "<div class=\"af-dl-info\">" +
+          "<div class=\"af-dl-name\">" + escHtml(dl.filename) + "</div>" +
+          "<div class=\"af-dl-size\">" + formatBytes(dl.size || 0) + "</div>" +
+        "</div>" +
+        "<button class=\"af-dl-btn\">↓ Download</button>" +
+      "</div>";
+    card.querySelector(".af-dl-btn").addEventListener("click", () => {
+      const downloadUrl = BACKEND_URL + dl.url + "?key=" + encodeURIComponent(API_KEY);
+      const a = document.createElement("a");
+      a.href = downloadUrl; a.download = dl.filename; a.target = "_blank"; a.click();
+    });
+    msgs.appendChild(card);
+  });
+  updateFilesBadge();
+}
 
     msgs.scrollTop = msgs.scrollHeight;
   }
