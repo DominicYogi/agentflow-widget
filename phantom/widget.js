@@ -30,6 +30,12 @@
   let attachments         = [];   // [{ name, type, size, dataUrl, text }]
   const SESSION_KEY       = "af_conv_" + (API_KEY || "default");
 
+  // ── Network / connection state ────────────────────────
+  // 'ok' | 'slow' | 'offline'
+  let networkStatus   = "ok";
+  let offlineQueue    = [];   // messages buffered while offline
+  let _lastOnlineAt   = Date.now();
+
   // ── Device fingerprint ────────────────────────────────
   const deviceInfo = (function () {
     const ua = navigator.userAgent;
@@ -132,7 +138,27 @@
     .af-hinfo .af-title { font-size: 14px; font-weight: 700; }
     .af-hinfo .af-sub   { font-size: 11px; opacity: 0.72; margin-top: 2px; }
     .af-hright { display: flex; align-items: center; gap: 10px; }
-    .af-dot { width: 7px; height: 7px; border-radius: 50%; background: #00FF88; animation: af-pulse 2s infinite; }
+    /* ── Network status banner ── */
+    #af-net-banner {
+      display: none; align-items: center; gap: 8px;
+      padding: 7px 14px; font-size: 12px; font-weight: 600;
+      flex-shrink: 0; border-bottom: 1px solid transparent;
+      transition: background 0.3s, color 0.3s;
+    }
+    #af-net-banner.visible { display: flex; }
+    #af-net-banner.offline { background: #fdecea; color: #b71c1c; border-color: #ffcdd2; }
+    #af-net-banner.slow    { background: #fff8e1; color: #e65100; border-color: #ffe082; }
+    #af-net-banner .af-nb-icon { font-size: 14px; flex-shrink: 0; }
+    #af-net-banner .af-nb-msg  { flex: 1; }
+    #af-net-banner .af-nb-retry {
+      font-size: 11px; text-decoration: underline; cursor: pointer;
+      background: none; border: none; color: inherit; padding: 0;
+    }
+
+    /* ── Dot colours by network status ── */
+    .af-dot          { width: 7px; height: 7px; border-radius: 50%; background: #00FF88; animation: af-pulse 2s infinite; }
+    .af-dot.slow     { background: #FFB300; }
+    .af-dot.offline  { background: #f44336; animation: none; }
     @keyframes af-pulse { 0%,100%{opacity:1}50%{opacity:0.35} }
     #af-close { cursor:pointer; font-size:18px; opacity:0.75; }
     #af-close:hover { opacity:1; }
@@ -551,11 +577,17 @@
       </div>
       <div class="af-hright">
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;">
-          <div class="af-dot"></div><span>Live</span>
+          <div class="af-dot" id="af-status-dot"></div><span id="af-status-label">Live</span>
         </div>
         <button id="af-files-btn" title="Files">📁<span class="af-files-badge" id="af-files-badge" style="display:none"></span></button>
         <span id="af-close">✕</span>
       </div>
+    </div>
+    <!-- Network warning banner -->
+    <div id="af-net-banner">
+      <span class="af-nb-icon" id="af-nb-icon">⚠️</span>
+      <span class="af-nb-msg"  id="af-nb-msg">Connection issue</span>
+      <button class="af-nb-retry" id="af-nb-retry">Retry</button>
     </div>
     <!-- Files panel overlay -->
     <div id="af-files-panel">
@@ -822,12 +854,12 @@ async function renderFilesPanel() {
 
   try {
     // We pass the deviceId in the headers so the server can filter the files
-    const res = await fetch(`${BACKEND_URL}/api/agent/workspace?deviceId=${deviceInfo.deviceId}`, {
+    const res = await fetchWithRetry(`${BACKEND_URL}/api/agent/workspace?deviceId=${deviceInfo.deviceId}`, {
       headers: { 
         "x-api-key": API_KEY,
         "ngrok-skip-browser-warning": "true" 
       }
-    });
+    }, { timeout: adaptiveTimeout(12000), retries: 2 });
     const data = await res.json();
     
     if (!data.success || !data.files || data.files.length === 0) {
@@ -854,7 +886,7 @@ async function renderFilesPanel() {
     }).join("");
 
   } catch (err) {
-    list.innerHTML = '<div class="af-fp-empty">Error loading files.</div>';
+    list.innerHTML = '<div class="af-fp-empty">⚠️ Could not load files — check your connection and try again.</div>';
   }
 }
 
@@ -863,19 +895,21 @@ window.afDeleteFile = async function(filename) {
   if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/agent/workspace/${encodeURIComponent(filename)}`, {
+    const res = await fetchWithRetry(`${BACKEND_URL}/api/agent/workspace/${encodeURIComponent(filename)}`, {
       method: "DELETE",
       headers: { "x-api-key": API_KEY }
-    });
+    }, { timeout: adaptiveTimeout(10000), retries: 1 });
     
     if (res.ok) {
-      // Refresh the UI
       renderFilesPanel();
       updateFilesBadge();
     } else {
-      alert("Failed to delete file.");
+      alert("Failed to delete file. Please check your connection and try again.");
     }
   } catch (err) {
+    alert(err.name === "AbortError"
+      ? "Delete timed out. Please check your connection."
+      : "Failed to delete file.");
     console.error("Delete error:", err);
   }
 };
@@ -1244,9 +1278,9 @@ window.afDownloadFile = function(filename) {
     if (okMsgs.length)  addMsg("success", okMsgs.map(r => r.msg).join("<br>"));
     if (errMsgs.length) addMsg("error",   errMsgs.map(r => r.msg).join("<br>"));
 
-    // Audit trail
+    // Audit trail (fire-and-forget — failure must never block the user)
     const operator = detectOperator();
-    fetch(BACKEND_URL + "/api/agent/confirm", {
+    fetchWithRetry(BACKEND_URL + "/api/agent/confirm", {
       method: "POST",
       headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
       body: JSON.stringify({
@@ -1264,7 +1298,7 @@ window.afDownloadFile = function(filename) {
         device:    deviceInfo,
         sessionId: SESSION_KEY
       })
-    }).catch(() => {});
+    }, { timeout: 10000, retries: 2 }).catch(() => {});
   }
 
   // ── Confirm card ──────────────────────────────────────
@@ -1467,6 +1501,14 @@ window.afDownloadFile = function(filename) {
 
   // ── Send message ──────────────────────────────────────
   async function sendMessage(message) {
+
+  // ── Offline guard — queue instead of failing ─────────
+  if (networkStatus === "offline") {
+    offlineQueue.push(message);
+    addMsg("warning", "📮 You're offline — your message has been queued and will send automatically when you reconnect.", false);
+    return;
+  }
+
   setInputLocked(true);
 
   // 1. Snapshot and clear current attachments
@@ -1496,18 +1538,19 @@ window.afDownloadFile = function(filename) {
         formData.append("files", blob, doc.name);
       }
 
-      await fetch(BACKEND_URL + "/api/agent/upload", {
+      await fetchWithRetry(BACKEND_URL + "/api/agent/upload", {
         method: "POST",
         headers: { 
           "x-api-key": API_KEY,
           "ngrok-skip-browser-warning": "true" 
         },
         body: formData
-      });
+      }, { timeout: adaptiveTimeout(30000), retries: 1 });
     }
 
-    // Match backend: 40 turns, 2000 chars each
-    const historyForAI = conversationHistory.slice(-40).map(m => ({
+    // Adaptive history — send fewer turns on slow connections to reduce payload
+    const historyLimit = adaptiveHistoryLimit();
+    const historyForAI = conversationHistory.slice(-historyLimit).map(m => ({
       role: m.type === "user" ? "user" : "assistant",
       content: m.html.replace(/<[^>]+>/g, "").slice(0, 2000)
     }));
@@ -1515,13 +1558,15 @@ window.afDownloadFile = function(filename) {
     // 5. Capture current page context for the AI
     const pageContext = scanPage();
 
-    // 6. Send the message payload
-    const res = await fetch(BACKEND_URL + "/api/agent/message", {
+    // 6. Send the message payload with retry + adaptive timeout
+    //    AI responses are slow by nature; give 60 s on good, 120 s on slow link.
+    const res = await fetchWithRetry(BACKEND_URL + "/api/agent/message", {
       method: "POST",
       headers: { 
         "x-api-key": API_KEY, 
         "Content-Type": "application/json", 
-        "ngrok-skip-browser-warning": "true" 
+        "ngrok-skip-browser-warning": "true",
+        "x-connection-quality": networkStatus   // hint for server-side adaptation
       },
       body: JSON.stringify({
         message: message,
@@ -1534,7 +1579,7 @@ window.afDownloadFile = function(filename) {
           dataUrl: a.dataUrl
         })) : undefined
       })
-    });
+    }, { timeout: adaptiveTimeout(60000), retries: 1, backoff: 2000 });
 
     thinking.remove();
     if (!res.ok) throw new Error("Backend error " + res.status);
@@ -1641,7 +1686,16 @@ window.afDownloadFile = function(filename) {
 
   } catch (err) {
     if (thinking) thinking.remove();
-    addMsg("error", "⚠️ Something went wrong. Check that the server is running.");
+    // Distinguish timeout / offline errors from general backend errors
+    if (err.name === "AbortError") {
+      addMsg("error", "⏱️ The request timed out. Your connection may be slow — please try again.");
+    } else if (!navigator.onLine) {
+      offlineQueue.push(message);
+      addMsg("warning", "📮 You went offline mid-request. Message queued — it'll send when you reconnect.");
+      updateNetworkStatus();
+    } else {
+      addMsg("error", "⚠️ Something went wrong. Check that the server is running.");
+    }
     console.error("AgentFlow error:", err);
     setInputLocked(false);
   }
@@ -1660,7 +1714,7 @@ window.afDownloadFile = function(filename) {
 
       const pageData = scanPage(); // already fully parsed by the live DOM
 
-      fetch(BACKEND_URL + "/api/agent/learn-page", {
+      fetchWithRetry(BACKEND_URL + "/api/agent/learn-page", {
         method: "POST",
         headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1668,7 +1722,7 @@ window.afDownloadFile = function(filename) {
           url:      window.location.href,
           pageText: document.body.innerText.slice(0, 1000)
         })
-      })
+      }, { timeout: adaptiveTimeout(15000), retries: 1 })
       .then(res => res.json())
       .then(data => {
         if (data.success) addMsg("success", `✅ Page "<strong>${pageData.pageTitle}</strong>" saved to knowledge base! The AI now knows its structure.`);
@@ -1689,6 +1743,175 @@ window.afDownloadFile = function(filename) {
   document.getElementById("af-input").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); handleSend(); } });
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // ════════════════════════════════════════════════════════
+  // ── NETWORK RESILIENCE LAYER ──────────────────────────
+  // fetchWithTimeout  — aborts the request after `ms` milliseconds.
+  // fetchWithRetry    — retries on network failure with exponential backoff.
+  // Adaptive timeouts — shorter for status checks, longer for AI replies.
+  // ════════════════════════════════════════════════════════
+
+  /**
+   * Wraps fetch() with an AbortController-based timeout.
+   * @param {string}  url
+   * @param {object}  options  – standard fetch options
+   * @param {number}  ms       – timeout in milliseconds (default 20 s)
+   */
+  function fetchWithTimeout(url, options, ms = 20000) {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { ...options, signal: ctrl.signal })
+      .finally(() => clearTimeout(timer));
+  }
+
+  /**
+   * fetchWithTimeout + automatic retry on network errors.
+   * @param {string}  url
+   * @param {object}  options
+   * @param {object}  cfg      – { timeout, retries, backoff }
+   */
+  async function fetchWithRetry(url, options, { timeout = 20000, retries = 2, backoff = 1500 } = {}) {
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      if (attempt > 0) {
+        await sleep(backoff * attempt);
+      }
+      try {
+        const res = await fetchWithTimeout(url, options, timeout);
+        return res;
+      } catch (err) {
+        lastErr = err;
+        // If the request was explicitly aborted (timeout) don't retry —
+        // the next attempt would also time out and just waste user time.
+        if (err.name === "AbortError") break;
+      }
+    }
+    throw lastErr;
+  }
+
+  // ── Network quality detection ─────────────────────────
+  /**
+   * Returns 'offline' | 'slow' | 'ok' based on browser APIs.
+   * Uses navigator.connection (Network Information API) where available.
+   */
+  function detectNetworkQuality() {
+    if (!navigator.onLine) return "offline";
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn) {
+      if (conn.saveData)                          return "slow";
+      if (conn.effectiveType === "2g")             return "slow";
+      if (conn.effectiveType === "slow-2g")        return "slow";
+      if (conn.downlink !== undefined && conn.downlink < 0.5) return "slow";
+    }
+    return "ok";
+  }
+
+  /**
+   * Returns a trimmed timeout in ms tuned to the current connection quality.
+   * 'ok'      → use the passed-in default
+   * 'slow'    → 2× default (more patience)
+   * 'offline' → 8 s (fail fast so error message shows quickly)
+   */
+  function adaptiveTimeout(defaultMs = 20000) {
+    if (networkStatus === "offline") return 8000;
+    if (networkStatus === "slow")    return defaultMs * 2;
+    return defaultMs;
+  }
+
+  /**
+   * Returns the number of conversation turns to include in the AI payload.
+   * Reduces context on slow links to shrink the request body.
+   */
+  function adaptiveHistoryLimit() {
+    if (networkStatus === "slow") return 12;
+    return 40;
+  }
+
+  // ── Update the visual status dot & label ─────────────
+  function updateStatusDot(status) {
+    const dot   = document.getElementById("af-status-dot");
+    const label = document.getElementById("af-status-label");
+    if (!dot || !label) return;
+    dot.className   = "af-dot" + (status !== "ok" ? " " + status : "");
+    label.textContent = status === "offline" ? "Offline"
+                      : status === "slow"    ? "Slow"
+                      : "Live";
+  }
+
+  // ── Show / hide the network warning banner ────────────
+  function showNetworkBanner(level, message) {
+    const banner = document.getElementById("af-net-banner");
+    const icon   = document.getElementById("af-nb-icon");
+    const msg    = document.getElementById("af-nb-msg");
+    if (!banner) return;
+    banner.className = "visible " + level;
+    icon.textContent = level === "offline" ? "🔴" : "🟡";
+    msg.textContent  = message;
+    banner.style.display = "flex";
+  }
+
+  function hideNetworkBanner() {
+    const banner = document.getElementById("af-net-banner");
+    if (banner) { banner.className = ""; banner.style.display = "none"; }
+  }
+
+  // ── Central network-status update ────────────────────
+  function updateNetworkStatus() {
+    const quality = detectNetworkQuality();
+    const changed = quality !== networkStatus;
+    networkStatus = quality;
+    updateStatusDot(quality);
+
+    if (quality === "offline") {
+      showNetworkBanner("offline", "You are offline — messages will be queued and sent when you reconnect.");
+    } else if (quality === "slow") {
+      showNetworkBanner("slow", "Slow connection detected — responses may take a bit longer than usual.");
+    } else {
+      hideNetworkBanner();
+    }
+
+    return changed;
+  }
+
+  // ── Drain offline queue when connection returns ───────
+  async function drainOfflineQueue() {
+    if (offlineQueue.length === 0 || networkStatus !== "ok") return;
+    const queued    = offlineQueue.splice(0);  // take all, clear the array
+    const count     = queued.length;
+    addMsg("agent", `📶 Back online — sending ${count} queued message${count > 1 ? "s" : ""}…`, false);
+    for (const msg of queued) {
+      await sleep(400);
+      await sendMessage(msg);
+    }
+  }
+
+  // ── Wire up browser online / offline events ───────────
+  window.addEventListener("online",  () => {
+    updateNetworkStatus();
+    addMsg("agent", "✅ Connection restored.", false);
+    drainOfflineQueue();
+  });
+  window.addEventListener("offline", () => {
+    updateNetworkStatus();
+    addMsg("warning", "🔴 You've gone offline. Your next message will be queued.", false);
+  });
+
+  // Also react to connection-quality changes (Chrome/Android)
+  const _conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (_conn) {
+    _conn.addEventListener("change", () => updateNetworkStatus());
+  }
+
+  // Run once on load
+  updateNetworkStatus();
+
+  // ── Retry button in the banner ────────────────────────
+  document.getElementById("af-nb-retry").addEventListener("click", () => {
+    updateNetworkStatus();
+    if (networkStatus !== "offline") {
+      drainOfflineQueue();
+    }
+  });
 
   // ── Init ──────────────────────────────────────────────
   async function init() {
@@ -1713,9 +1936,9 @@ window.afDownloadFile = function(filename) {
           }
         } catch {}
       }());
-      const res  = await fetch(BACKEND_URL + "/api/agent/status", {
+      const res  = await fetchWithRetry(BACKEND_URL + "/api/agent/status", {
         headers: { "x-api-key": API_KEY, "ngrok-skip-browser-warning": "true" }
-      });
+      }, { timeout: adaptiveTimeout(10000), retries: 3, backoff: 2000 });
       const data = await res.json();
       if (!data.success) {
         clearMessages();
@@ -1763,13 +1986,20 @@ window.afDownloadFile = function(filename) {
       // Silently learn this page in the background
       autoLearnPage();
 
-      // Crawl all other linked same-origin pages via hidden iframes so
-      // the bot knows the full site from the moment the script tag is added.
-      crawlAndLearnSite();
+      // Crawl all other linked same-origin pages via hidden iframes —
+      // skip on slow or offline connections to avoid hammering a bad link.
+      if (networkStatus === "ok") {
+        crawlAndLearnSite();
+      }
 
     } catch (err) {
       clearMessages();
-      addMsg("error", "⚠️ Could not connect to AgentFlow backend.", false);
+      if (err.name === "AbortError" || !navigator.onLine) {
+        addMsg("error", "🔴 Could not connect to AgentFlow — please check your internet connection and try again.", false);
+        updateNetworkStatus();
+      } else {
+        addMsg("error", "⚠️ Could not connect to AgentFlow backend.", false);
+      }
       console.error("AgentFlow init:", err);
     }
   }
@@ -1803,7 +2033,7 @@ window.afDownloadFile = function(filename) {
         content: m.html.replace(/<[^>]+>/g, "").slice(0, 400)
       }));
 
-      const res = await fetch(BACKEND_URL + "/api/agent/message", {
+      const res = await fetchWithRetry(BACKEND_URL + "/api/agent/message", {
         method: "POST",
         headers: {
           "x-api-key": API_KEY,
@@ -1816,7 +2046,7 @@ window.afDownloadFile = function(filename) {
           history:        historyForAI,
           isContinuation: true
         })
-      });
+      }, { timeout: adaptiveTimeout(60000), retries: 1, backoff: 2000 });
 
       thinking.remove();
       if (!res.ok) throw new Error("Backend error " + res.status);
@@ -1841,7 +2071,11 @@ window.afDownloadFile = function(filename) {
 
     } catch (err) {
       if (thinking.parentNode) thinking.remove();
-      addMsg("error", "⚠️ Could not resume the task on this page. Please try again.");
+      if (err.name === "AbortError") {
+        addMsg("error", "⏱️ The continuation request timed out. Please try again.");
+      } else {
+        addMsg("error", "⚠️ Could not resume the task on this page. Please try again.");
+      }
       console.error("Continuation resume error:", err);
     } finally {
       setInputLocked(false);
@@ -1892,6 +2126,8 @@ window.afDownloadFile = function(filename) {
   }
 
   async function autoLearnPage() {
+    // Don't burn bandwidth learning pages on a bad connection
+    if (networkStatus !== "ok") return;
     try {
       const pageData    = scanPage();
       const url         = window.location.href;
@@ -1904,7 +2140,7 @@ window.afDownloadFile = function(filename) {
       // Skip if same fingerprint seen within TTL
       if (cached && cached.fp === fingerprint && (now - cached.ts) < LEARN_TTL_MS) return;
 
-      await fetch(BACKEND_URL + "/api/agent/learn-page", {
+      await fetchWithTimeout(BACKEND_URL + "/api/agent/learn-page", {
         method:  "POST",
         headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
         body:    JSON.stringify({
@@ -1912,7 +2148,7 @@ window.afDownloadFile = function(filename) {
           url,
           pageText: document.body.innerText.slice(0, 1000)
         })
-      });
+      }, 15000);
 
       // Update cache entry for this URL
       cache[url] = { fp: fingerprint, ts: now };
@@ -2051,6 +2287,9 @@ window.afDownloadFile = function(filename) {
   }
 
   async function crawlAndLearnSite() {
+    // Never crawl on slow or offline connections — iframes + sequential fetches
+    // would either fail silently or waste the user's bandwidth cap.
+    if (networkStatus !== "ok") return;
     try {
       const now        = Date.now();
       const learnCache = getLearnCache();
@@ -2086,11 +2325,11 @@ window.afDownloadFile = function(filename) {
           const { pageData, pageText } = result;
           const fingerprint = pageData.buttons.length + ":" + pageData.inputs.length + ":" + pageData.links.length;
 
-          await fetch(BACKEND_URL + "/api/agent/learn-page", {
+          await fetchWithTimeout(BACKEND_URL + "/api/agent/learn-page", {
             method:  "POST",
             headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
             body:    JSON.stringify({ pageData, url, pageText })
-          });
+          }, 15000);
 
           // Update learn cache so autoLearnPage skips this URL on the user's next real visit
           learnCache[url] = { fp: fingerprint, ts: now };
