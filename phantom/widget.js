@@ -470,8 +470,8 @@
     </div>
 
     <div id="af-input-area">
-      <label id="af-attach-btn" for="af-file-input" title="Attach file or image">📎</label>
-      <input id="af-file-input" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls" />
+      <label id="af-attach-btn" for="af-file-input" title="Attach image">📷</label>
+      <input id="af-file-input" type="file" multiple accept="image/*" />
       <input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />
       <button id="af-mic" type="button" title="Click to record voice" disabled>🎤</button>
       <button id="af-send" type="button" disabled>➤</button>
@@ -588,18 +588,24 @@
   }
 
   fileInput.addEventListener("change", async () => {
-    const files = Array.from(fileInput.files);
-    for (const file of files) {
-      if (file.size > 10 * 1024 * 1024) {
-        addMsg("warning", `⚠️ "${file.name}" is over 10 MB and was skipped.`);
-        continue;
-      }
-      const att = await readFile(file);
-      attachments.push(att);
+  const files = Array.from(fileInput.files);
+  for (const file of files) {
+    // Check if the file is an image
+    if (!file.type.startsWith("image/")) {
+      addMsg("warning", `⚠️ "${file.name}" is not an image and was skipped.`);
+      continue;
     }
-    renderTray();
-    fileInput.value = "";
-  });
+    
+    if (file.size > 10 * 1024 * 1024) {
+      addMsg("warning", `⚠️ "${file.name}" is over 10 MB and was skipped.`);
+      continue;
+    }
+    const att = await readFile(file);
+    attachments.push(att);
+  }
+  renderTray();
+  fileInput.value = "";
+});
 
   // Read file into base64 + extract text where possible
   function readFile(file) {
