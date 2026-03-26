@@ -344,6 +344,46 @@
     .af-confirm-btns button { flex: 1; padding: 8px 0; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.18s; }
     .af-btn-yes { background: ${theme.primary}; color: white; }
     .af-btn-no  { background: #f0f0f0; color: #555; }
+
+    /* ── File select card ── */
+    .af-file-select-card {
+      background: white; border: 1.5px solid ${theme.primary}33;
+      border-radius: 12px; align-self: flex-start; max-width: 92%;
+      box-shadow: 0 3px 14px rgba(0,0,0,0.08); overflow: hidden;
+      flex-shrink: 0; min-width: 240px;
+    }
+    .af-fsc-header {
+      background: ${theme.primary}; color: white;
+      padding: 8px 13px; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .af-fsc-prompt {
+      font-size: 13px; color: #333; padding: 10px 13px 6px;
+      border-bottom: 1px solid #f0f0f0; line-height: 1.45;
+    }
+    .af-fsc-list {
+      padding: 8px 10px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .af-fsc-option {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 11px; border-radius: 8px; cursor: pointer;
+      border: 1.5px solid #e4e4e4; background: #fafafa;
+      font-size: 12.5px; color: #222; font-weight: 500;
+      transition: border-color 0.15s, background 0.15s;
+      text-align: left; width: 100%;
+    }
+    .af-fsc-option:hover {
+      border-color: ${theme.primary}; background: ${theme.light};
+      color: ${theme.primary};
+    }
+    .af-fsc-option-icon { font-size: 16px; flex-shrink: 0; }
+    .af-fsc-cancel {
+      display: block; width: 100%; padding: 8px 13px;
+      border: none; border-top: 1px solid #f0f0f0;
+      background: none; font-size: 12px; color: #aaa;
+      cursor: pointer; text-align: center;
+    }
+    .af-fsc-cancel:hover { color: #e53935; }
     .af-confirm-btns button:hover { opacity: 0.85; }
     .af-confirm-btns button:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -1378,6 +1418,53 @@ window.afDownloadFile = function(filename) {
     document.getElementById("af-mic").disabled   = locked;
   }
 
+  // ── File select card ─────────────────────────────────
+  // Renders a list of library files for the user to pick from.
+  // On click, sends the filename back as a user message so the AI reads it.
+  function showFileSelectCard(prompt, files) {
+    const msgs = document.getElementById("af-messages");
+    const card = document.createElement("div");
+    card.className = "af-file-select-card";
+
+    const FILE_ICONS = { csv:"📊", xlsx:"📊", xls:"📊", pdf:"📄", txt:"📋", md:"📋", docx:"📝", pptx:"📑", json:"🗂️" };
+    function fIcon(name) {
+      const ext = (name.split(".").pop() || "").toLowerCase();
+      return FILE_ICONS[ext] || "📁";
+    }
+
+    const optionsHtml = files.map(f =>
+      `<button class="af-fsc-option" data-filename="${escHtml(f)}">` +
+        `<span class="af-fsc-option-icon">${fIcon(f)}</span>` +
+        `<span>${escHtml(f)}</span>` +
+      `</button>`
+    ).join("");
+
+    card.innerHTML =
+      `<div class="af-fsc-header">📚 Choose a reference file</div>` +
+      `<div class="af-fsc-prompt">${escHtml(prompt || "Which file should I use to answer your question?")}</div>` +
+      `<div class="af-fsc-list">${optionsHtml}</div>` +
+      `<button class="af-fsc-cancel">Cancel</button>`;
+
+    msgs.appendChild(card);
+    setTimeout(() => card.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
+    setInputLocked(true);
+
+    card.querySelectorAll(".af-fsc-option").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const chosen = btn.getAttribute("data-filename");
+        card.remove();
+        setInputLocked(false);
+        sendMessage(chosen);
+      });
+    });
+
+    card.querySelector(".af-fsc-cancel").addEventListener("click", () => {
+      card.remove();
+      addMsg("agent", "No problem. Let me know if you need anything else.");
+      setInputLocked(false);
+    });
+  }
+
   // ── Send message ──────────────────────────────────────
   async function sendMessage(message) {
   setInputLocked(true);
@@ -1419,11 +1506,10 @@ window.afDownloadFile = function(filename) {
       });
     }
 
-    // 5. Prepare data for the Agent Agentic Loop
-    const pageContext = scanPage();
-    const historyForAI = conversationHistory.slice(-20).map(m => ({
+    // Match backend: 40 turns, 2000 chars each
+    const historyForAI = conversationHistory.slice(-40).map(m => ({
       role: m.type === "user" ? "user" : "assistant",
-      content: m.html.replace(/<[^>]+>/g, "").slice(0, 400)
+      content: m.html.replace(/<[^>]+>/g, "").slice(0, 2000)
     }));
 
     // 6. Send the message payload
@@ -1457,6 +1543,8 @@ window.afDownloadFile = function(filename) {
     // 7. Handle different response types (Chat, Page Tasks, or File Operations)
     if (response.type === "chat") {
       addMsg("agent", response.reply);
+    } else if (response.type === "file_select") {
+      showFileSelectCard(response.reply, response.files || []);
     } else if (response.type === "task") {
       if (response.plan?.actions?.length > 0) {
         response.plan.originalCommand = message;
@@ -1470,13 +1558,13 @@ window.afDownloadFile = function(filename) {
         const p = JSON.parse(fileReply);
         if (p?.reply) fileReply = p.reply;
       } catch {}
-      // Display the tool steps and any files the AI created for download
       showFileResult(response.steps || [], fileReply, response.downloadables || []);
     } else {
       addMsg("agent", response.reply || "Done.");
     }
 
-    setInputLocked(false);
+    // file_select manages its own lock — only unlock for other response types
+    if (response.type !== "file_select") setInputLocked(false);
 
   } catch (err) {
     if (thinking) thinking.remove();
