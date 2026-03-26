@@ -1542,21 +1542,80 @@ window.afDownloadFile = function(filename) {
     if (!data.success) throw new Error(data.error || "Unknown error");
 
     // 7. Handle different response types (Chat, Page Tasks, or File Operations)
-    // Safety net: if the model returned a task/file JSON but the outer type was
-    // incorrectly set to "chat" (or the raw JSON string leaked in as the reply),
-    // re-parse and re-route before rendering anything.
-    function tryReparse(r) {
-      if (r.type !== "chat") return r;
-      try {
-        const inner = JSON.parse((r.reply || "").replace(/```json|```/g, "").trim());
-        if (inner && inner.type && inner.type !== "chat") return inner;
-      } catch {}
-      return r;
+    // ── Robust JSON extractor: mirrors backend extractJSON logic ─────────
+    // Finds and returns the first complete JSON object inside any string,
+    // even if the model added a preamble, trailing text, or markdown fences.
+    function extractFirstJSON(str) {
+      const raw   = (str || "").replace(/```json|```/g, "").trim();
+      const start = raw.indexOf("{");
+      if (start === -1) throw new Error("No JSON");
+      let depth = 0, inStr = false, esc = false, end = -1;
+      for (let i = start; i < raw.length; i++) {
+        const c = raw[i];
+        if (esc)        { esc = false; continue; }
+        if (c === "\\") { esc = true;  continue; }
+        if (c === '"')  { inStr = !inStr; continue; }
+        if (inStr)      continue;
+        if (c === "{")  depth++;
+        else if (c === "}") { depth--; if (depth === 0) { end = i; break; } }
+      }
+      if (end === -1) throw new Error("Unbalanced");
+      return JSON.parse(raw.slice(start, end + 1).replace(/,(\s*[}\]])/g, "$1"));
     }
+
+    // ── tryReparse: handles all the ways the response can go wrong ───────
+    // 1. Response is already a correctly-typed object → pass through
+    // 2. Response is a string (double-serialised) → extract JSON from it
+    // 3. Response is {type:"chat", reply: "<json string>"} → extract from reply
+    // 4. Response has no type / unexpected type → try to extract from reply
+    function tryReparse(r) {
+      // Already a known non-chat typed response — return as-is
+      if (r && typeof r === "object" && r.type && r.type !== "chat") return r;
+
+      // r is a raw string (backend accidentally stringified the object)
+      if (typeof r === "string") {
+        try {
+          const parsed = extractFirstJSON(r);
+          if (parsed && parsed.type) return parsed;
+        } catch {}
+        return { type: "chat", reply: r };
+      }
+
+      // r.reply may contain a raw JSON string (extractJSON failed on backend)
+      const replyStr = (r && r.reply) ? String(r.reply) : "";
+      if (replyStr.includes("{")) {
+        try {
+          const inner = extractFirstJSON(replyStr);
+          if (inner && inner.type && inner.type !== "chat") return inner;
+        } catch {}
+      }
+
+      return r || { type: "chat", reply: "Done." };
+    }
+
     const response = tryReparse(data.response);
 
     if (response.type === "chat") {
-      addMsg("agent", response.reply);
+      // Guard: never render raw JSON as a chat bubble
+      const replyText = response.reply || "";
+      if (replyText.trimStart().startsWith("{")) {
+        try {
+          const rescued = extractFirstJSON(replyText);
+          if (rescued && rescued.type && rescued.type !== "chat") {
+            if (rescued.type === "task" && rescued.plan?.actions?.length > 0) {
+              rescued.plan.originalCommand = message;
+              showConfirmCard(rescued.reply, rescued.plan);
+            } else if (rescued.type === "file_select") {
+              showFileSelectCard(rescued.reply, rescued.files || []);
+            } else {
+              addMsg("agent", rescued.reply || "Done.");
+            }
+            if (rescued.type !== "file_select") setInputLocked(false);
+            return;
+          }
+        } catch {}
+      }
+      addMsg("agent", replyText || "Done.");
     } else if (response.type === "file_select") {
       showFileSelectCard(response.reply, response.files || []);
     } else if (response.type === "task") {
@@ -1564,12 +1623,12 @@ window.afDownloadFile = function(filename) {
         response.plan.originalCommand = message;
         showConfirmCard(response.reply, response.plan);
       } else {
-        addMsg("agent", response.reply);
+        addMsg("agent", response.reply || "Done.");
       }
     } else if (response.type === "file_result") {
       let fileReply = response.reply || "Done.";
       try {
-        const p = JSON.parse(fileReply);
+        const p = extractFirstJSON(fileReply);
         if (p?.reply) fileReply = p.reply;
       } catch {}
       showFileResult(response.steps || [], fileReply, response.downloadables || []);
