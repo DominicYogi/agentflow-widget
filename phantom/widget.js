@@ -1541,9 +1541,20 @@ window.afDownloadFile = function(filename) {
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Unknown error");
 
-    const response = data.response;
-
     // 7. Handle different response types (Chat, Page Tasks, or File Operations)
+    // Safety net: if the model returned a task/file JSON but the outer type was
+    // incorrectly set to "chat" (or the raw JSON string leaked in as the reply),
+    // re-parse and re-route before rendering anything.
+    function tryReparse(r) {
+      if (r.type !== "chat") return r;
+      try {
+        const inner = JSON.parse((r.reply || "").replace(/```json|```/g, "").trim());
+        if (inner && inner.type && inner.type !== "chat") return inner;
+      } catch {}
+      return r;
+    }
+    const response = tryReparse(data.response);
+
     if (response.type === "chat") {
       addMsg("agent", response.reply);
     } else if (response.type === "file_select") {
