@@ -1,7 +1,7 @@
 (function () {
 
   // ── Config ────────────────────────────────────────────
-  const BACKEND_URL = "https://agentflow-backend-krdb.onrender.com";
+  const BACKEND_URL = "https://agentflow-backend-hqqc.onrender.com";
   const API_KEY  = document.currentScript?.getAttribute("data-api-key") || "af_live_medicare001";
   const THEME    = document.currentScript?.getAttribute("data-theme")   || "blue";
 
