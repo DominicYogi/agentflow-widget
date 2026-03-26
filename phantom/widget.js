@@ -117,9 +117,63 @@
     #af-close:hover { opacity:1; }
 
     #af-messages {
-      flex: 1; padding: 14px 14px 20px; overflow-y: auto; background: #f7f8fa;
-      display: flex; flex-direction: column; gap: 10px; min-height: 200px;
-    }
+  flex: 1; 
+  padding: 14px 14px 20px; 
+  overflow-y: scroll; /* Force the scrollbar area to exist */
+  background: #f7f8fa;
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+  min-height: 200px;
+  /* Added to ensure the scrollbar is always visible and interactive */
+  scrollbar-width: auto; 
+  scrollbar-color: ${theme.primary} #f0f0f0;
+}
+  /* Custom Scrollbar Styling */
+#af-messages::-webkit-scrollbar {
+  width: 14px; /* Slightly wider to accommodate arrows comfortably */
+  display: block;
+}
+
+#af-messages::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-left: 1px solid #e0e0e0;
+}
+
+#af-messages::-webkit-scrollbar-thumb {
+  background-color: ${theme.primary}aa;
+  border-radius: 10px;
+  border: 3px solid #f0f0f0;
+}
+
+#af-messages::-webkit-scrollbar-thumb:hover {
+  background-color: ${theme.primary};
+}
+
+/* ── The Scrollbar Arrows (Buttons) ── */
+#af-messages::-webkit-scrollbar-button:single-button {
+  background-color: #f0f0f0;
+  display: block;
+  border-style: solid;
+  height: 14px;
+  width: 14px;
+}
+
+/* Up Arrow */
+#af-messages::-webkit-scrollbar-button:single-button:vertical:decrement {
+  border-width: 0 4px 6px 4px;
+  border-color: transparent transparent #666 transparent;
+}
+
+/* Down Arrow */
+#af-messages::-webkit-scrollbar-button:single-button:vertical:increment {
+  border-width: 6px 4px 0 4px;
+  border-color: #666 transparent transparent transparent;
+}
+
+#af-messages::-webkit-scrollbar-button:vertical:single-button:hover {
+  background-color: #e0e0e0;
+}
     .af-msg {
       max-width: 86%; padding: 10px 14px; border-radius: 14px; font-size: 13px;
       line-height: 1.55; word-break: break-word;
