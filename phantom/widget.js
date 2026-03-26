@@ -1512,6 +1512,9 @@ window.afDownloadFile = function(filename) {
       content: m.html.replace(/<[^>]+>/g, "").slice(0, 2000)
     }));
 
+    // 5. Capture current page context for the AI
+    const pageContext = scanPage();
+
     // 6. Send the message payload
     const res = await fetch(BACKEND_URL + "/api/agent/message", {
       method: "POST",
