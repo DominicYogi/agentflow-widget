@@ -12,6 +12,15 @@
     red: { primary: "#9B1B1B", light: "#fdf0f0", accent: "#7a1515" }
   };
   const theme = THEMES[THEME] || THEMES.blue;
+  // ── Modern Icon Set ──────────────────────────────────
+  const ICONS = {
+    file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`,
+    image: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.2em;height:1.2em;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`,
+    trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
+    download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.1em;height:1.1em;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
+    send: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.1em;height:1.1em;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`,
+    mic: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.1em;height:1.1em;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>`
+  };
 
   // ── State ─────────────────────────────────────────────
   let clientInfo          = null;
@@ -36,7 +45,19 @@
     else if (/Chrome\//.test(ua))    browser = "Chrome";
     else if (/Firefox\//.test(ua))   browser = "Firefox";
     else if (/Safari\//.test(ua))    browser = "Safari";
-    return {
+
+    const fingerprint = [
+    ua,
+    navigator.language,
+    screen.width + "x" + screen.height,
+    Intl.DateTimeFormat().resolvedOptions().timeZone
+  ].join("|");
+  
+  // Simple hash function for the ID
+  const deviceId = btoa(fingerprint).slice(0, 32);
+
+     return {
+      deviceId,
       os, browser,
       screenRes: screen.width + "x" + screen.height,
       timezone:  Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -459,6 +480,17 @@
       padding: 5px; background: white; border-top: 1px solid #f0f0f0; flex-shrink: 0;
     }
     #af-branding a { color: ${theme.primary}; text-decoration: none; font-weight: 700; }
+    /* Modern Icon Styling */
+.af-fp-item-icon { font-size: 22px; color: #555; }
+.af-fp-delete {
+  background: none; border: none; color: #ff5252;
+  cursor: pointer; padding: 5px; opacity: 0.6;
+  transition: opacity 0.2s; font-size: 16px;
+}
+.af-fp-delete:hover { opacity: 1; }
+
+/* Files Panel Loader */
+.af-fp-loading { text-align: center; padding: 20px; color: #888; font-size: 13px; }
   `;
   document.head.appendChild(style);
 
@@ -524,11 +556,11 @@
     </div>
 
     <div id="af-input-area">
-      <label id="af-attach-btn" for="af-file-input" title="Attach image">📷</label>
+      <label id="af-attach-btn" for="af-file-input" title="Attach image">${ICONS.image}</label>
       <input id="af-file-input" type="file" multiple accept="image/*" />
-      <input id="af-input" type="text" placeholder="Ask me anything or give me a task..." disabled />
-      <button id="af-mic" type="button" title="Click to record voice" disabled>🎤</button>
-      <button id="af-send" type="button" disabled>➤</button>
+      <input id="af-input" type="text" placeholder="Ask me anything..." disabled />
+      <button id="af-mic" type="button" disabled>${ICONS.mic}</button>
+      <button id="af-send" type="button" disabled>${ICONS.send}</button>
     </div>
     <div id="af-branding">Powered by <a href="#">LionTech</a></div>
   `;
@@ -743,40 +775,79 @@
     return d + "d ago";
   }
 
-  function renderFilesPanel() {
-    const list  = document.getElementById("af-fp-list");
-    const files = loadStoredFiles();
-    if (files.length === 0) {
-      list.innerHTML = "<div class=\"af-fp-empty\">No files yet. Send or receive a file to see it here.</div>";
+  // ── New: Fetch and Render Files from Server ──────────
+async function renderFilesPanel() {
+  const list = document.getElementById("af-fp-list");
+  list.innerHTML = '<div class="af-fp-loading">Loading your workspace...</div>';
+
+  try {
+    // We pass the deviceId in the headers so the server can filter the files
+    const res = await fetch(`${BACKEND_URL}/api/agent/workspace?deviceId=${deviceInfo.deviceId}`, {
+      headers: { 
+        "x-api-key": API_KEY,
+        "ngrok-skip-browser-warning": "true" 
+      }
+    });
+    const data = await res.json();
+    
+    if (!data.success || !data.files || data.files.length === 0) {
+      list.innerHTML = '<div class="af-fp-empty">No files in your workspace yet.</div>';
       return;
     }
-    const extIcons = { pdf:"📄", doc:"📝", docx:"📝", txt:"📋", csv:"📊", xlsx:"📊", xls:"📊",
-                       png:"🖼️", jpg:"🖼️", jpeg:"🖼️", gif:"🖼️", webp:"🖼️" };
-    list.innerHTML = files.map(function(f, i) {
-      const ext   = f.name.split(".").pop().toLowerCase();
-      const icon  = extIcons[ext] || "📁";
-      const badge = f.direction === "sent" ? "sent" : "received";
-      const label = f.direction === "sent" ? "Sent" : "Received";
-      const ago   = fpTimeAgo(f.time);
-      return "<div class=\"af-fp-item\">" +
-        "<div class=\"af-fp-item-icon\">" + icon + "</div>" +
-        "<div class=\"af-fp-item-info\">" +
-          "<div class=\"af-fp-item-name\">" + escHtml(f.name) + "</div>" +
-          "<div class=\"af-fp-item-meta\">" + formatBytes(f.size) + " \xB7 " + ago + "</div>" +
-        "</div>" +
-        "<span class=\"af-fp-item-badge " + badge + "\">" + label + "</span>" +
-        "<button class=\"af-fp-item-dl\" onclick=\"afDownloadFile(" + i + ")\">&#8595;</button>" +
-      "</div>";
-    }).join("");
-  }
 
-  window.afDownloadFile = function(idx) {
-  const files = loadStoredFiles();
-  const f = files[idx];
-  if (!f || !f.url) return;
-  const downloadUrl = BACKEND_URL + f.url + "?key=" + encodeURIComponent(API_KEY);
+    const icons = {
+      pdf: "📄", doc: "📝", docx: "📝", txt: "📑", 
+      csv: "📊", xlsx: "📊", png: "🖼️", jpg: "🖼️"
+    };
+
+    list.innerHTML = data.files.map((f) => {
+      return `
+        <div class="af-fp-item">
+          <div class="af-fp-item-icon">${ICONS.file}</div>
+          <div class="af-fp-item-info">
+            <div class="af-fp-item-name">${escHtml(f.name)}</div>
+            <div class="af-fp-item-meta">${formatBytes(f.size)}</div>
+          </div>
+          <button class="af-fp-item-dl" onclick="afDownloadFile('${f.name}')">${ICONS.download}</button>
+          <button class="af-fp-delete" onclick="afDeleteFile('${f.name}')">${ICONS.trash}</button>
+        </div>`;
+    }).join("");
+
+  } catch (err) {
+    list.innerHTML = '<div class="af-fp-empty">Error loading files.</div>';
+  }
+}
+
+// ── New: Delete Specific File ────────────────────────
+window.afDeleteFile = async function(filename) {
+  if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/agent/workspace/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+      headers: { "x-api-key": API_KEY }
+    });
+    
+    if (res.ok) {
+      // Refresh the UI
+      renderFilesPanel();
+      updateFilesBadge();
+    } else {
+      alert("Failed to delete file.");
+    }
+  } catch (err) {
+    console.error("Delete error:", err);
+  }
+};
+
+// ── Update Download Helper ───────────────────────────
+window.afDownloadFile = function(filename) {
+  const downloadUrl = `${BACKEND_URL}/api/agent/workspace/${encodeURIComponent(filename)}?key=${encodeURIComponent(API_KEY)}`;
   const a = document.createElement("a");
-  a.href = downloadUrl; a.download = f.name; a.target = "_blank"; a.click();
+  a.href = downloadUrl;
+  a.download = filename;
+  a.target = "_blank";
+  a.click();
 };
 
   // ── Wire up files panel toggle ─────────────────────────
@@ -1202,12 +1273,12 @@
     card.innerHTML =
       "<div class=\"af-dl-label\">📥 File ready</div>" +
       "<div class=\"af-dl-file\">" +
-        "<span class=\"af-dl-icon\">" + icon + "</span>" +
+        "<span class=\"af-dl-icon\" style=\"color:${theme.primary}\">" + ICONS.file + "</span>" +
         "<div class=\"af-dl-info\">" +
           "<div class=\"af-dl-name\">" + escHtml(dl.filename) + "</div>" +
           "<div class=\"af-dl-size\">" + formatBytes(dl.size || 0) + "</div>" +
         "</div>" +
-        "<button class=\"af-dl-btn\">↓ Download</button>" +
+        "<button class=\"af-dl-btn\">" + ICONS.download + " Download</button>" +
       "</div>";
     card.querySelector(".af-dl-btn").addEventListener("click", () => {
       const downloadUrl = BACKEND_URL + dl.url + "?key=" + encodeURIComponent(API_KEY);
