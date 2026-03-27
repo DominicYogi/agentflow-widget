@@ -1155,104 +1155,185 @@ window.afDownloadFile = function(filename) {
 
   // ── Action executor ───────────────────────────────────
   async function executeActions(actions) {
-    const results = [];
+    // results[i] and auditDetails[i] are always in sync with actions[i]
+    // so the audit log is never assembled by fragile string-matching.
+    const results      = [];   // { ok, msg }          — for UI display
+    const auditDetails = [];   // { type, description, value, elementId, success, startedAt, completedAt }
+
+    // ── Helper: fire the confirm audit call ─────────────────────────────────
+    // Accepts a pre-built details array so navigate can fire before page unloads.
+    function fireAudit(detailsSnapshot) {
+      const operator = detectOperator();
+      fetchWithRetry(BACKEND_URL + "/api/agent/confirm", {
+        method:  "POST",
+        headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+        body: JSON.stringify({
+          command:       pendingPlan ? pendingPlan.originalCommand : "",
+          action:        pendingPlan ? pendingPlan.taskType        : "task",
+          pageTitle:     document.title,
+          pageUrl:       window.location.href,
+          rowCount:      detailsSnapshot.length,
+          results:       results.map(r => r.msg),
+          actionDetails: detailsSnapshot,
+          operator:      { detectedName: operator, source: operator ? "page-scrape" : "unknown" },
+          device:        deviceInfo,
+          sessionId:     SESSION_KEY
+        })
+      }, { timeout: 10000, retries: 2 }).catch(() => {});
+    }
+
     for (let i = 0; i < actions.length; i++) {
-      const action = actions[i];
+      const action    = actions[i];
+      const startedAt = new Date().toISOString();
       await sleep(400);
+
+      let ok  = false;
+      let msg = "";
+
       try {
         let el = action.afId ? document.querySelector('[data-af-id="' + action.afId + '"]') : null;
         if (!el && action.elementId) el = document.getElementById(action.elementId);
         if (!el && action.selector)  el = document.querySelector(action.selector);
 
         if (!el && !["navigate","scroll","click_by_text"].includes(action.type)) {
-          results.push({ ok: false, msg: "Could not find element for: <em>" + action.description + "</em>" });
+          ok  = false;
+          msg = "Could not find element for: <em>" + action.description + "</em>";
+          results.push({ ok, msg });
+          auditDetails.push({ type: action.type, description: action.description, value: action.value||null, elementId: action.elementId||null, success: false, startedAt, completedAt: new Date().toISOString() });
           continue;
         }
 
         if (el) {
           const origOutline = el.style.outline, origBg = el.style.background;
-          el.style.outline = "2px solid " + theme.primary;
+          el.style.outline   = "2px solid " + theme.primary;
           el.style.background = theme.light;
           el.scrollIntoView({ behavior: "smooth", block: "center" });
           await sleep(350);
-          el.style.outline = origOutline;
+          el.style.outline    = origOutline;
           el.style.background = origBg;
         }
 
         if (action.type === "click") {
           el.click();
-          results.push({ ok: true, msg: "🖱️ Clicked <strong>" + action.description + "</strong>" });
+          ok  = true;
+          msg = "🖱️ Clicked <strong>" + action.description + "</strong>";
           await sleep(600);
 
         } else if (action.type === "click_by_text") {
           const searchText = (action.value || action.description || "").toLowerCase().trim();
-          const allBtns = Array.from(document.querySelectorAll("button,[role='button']")).filter(b => !b.closest("#af-panel"));
-          const match   = allBtns.find(b => b.textContent.trim().toLowerCase().includes(searchText));
+          const allBtns    = Array.from(document.querySelectorAll("button,[role='button']")).filter(b => !b.closest("#af-panel"));
+          const match      = allBtns.find(b => b.textContent.trim().toLowerCase().includes(searchText));
           if (match) {
             match.scrollIntoView({ behavior: "smooth", block: "center" });
-            await sleep(300); match.click();
-            results.push({ ok: true, msg: `🖱️ Clicked "<strong>${match.textContent.trim().slice(0,40)}</strong>"` });
+            await sleep(300);
+            match.click();
+            ok  = true;
+            msg = `🖱️ Clicked "<strong>${match.textContent.trim().slice(0,40)}</strong>"`;
             await sleep(700);
           } else {
-            results.push({ ok: false, msg: `⚠️ Could not find button with text: "${action.value}"` });
+            ok  = false;
+            msg = `⚠️ Could not find button with text: "${action.value}"`;
           }
 
         } else if (action.type === "fill") {
-          el.focus(); el.value = action.value;
+          el.focus();
+          el.value = action.value;
           el.dispatchEvent(new Event("input",  { bubbles: true }));
           el.dispatchEvent(new Event("change", { bubbles: true }));
-          results.push({ ok: true, msg: `✏️ Filled <strong>${action.description}</strong> → "${action.value}"` });
+          ok  = true;
+          msg = `✏️ Filled <strong>${action.description}</strong> → "${action.value}"`;
 
         } else if (action.type === "select") {
           el.value = action.value;
           el.dispatchEvent(new Event("change", { bubbles: true }));
-          results.push({ ok: true, msg: `📋 Selected <strong>${action.description}</strong> → "${action.value}"` });
+          ok  = true;
+          msg = `📋 Selected <strong>${action.description}</strong> → "${action.value}"`;
 
         } else if (action.type === "approve_row") {
           const btn = el.querySelector(".btn-approve,[class*='approve']") ||
             Array.from(el.querySelectorAll("button")).find(b => /approve/i.test(b.textContent));
-          if (btn) { btn.click(); results.push({ ok: true, msg: `✅ Approved — <strong>${action.description}</strong>` }); }
-          else results.push({ ok: false, msg: `⚠️ No approve button in row: <strong>${action.description}</strong>` });
+          if (btn) { btn.click(); ok = true;  msg = `✅ Approved — <strong>${action.description}</strong>`; }
+          else      {             ok = false; msg = `⚠️ No approve button in row: <strong>${action.description}</strong>`; }
 
         } else if (action.type === "reject_row") {
           const btn = el.querySelector(".btn-reject,[class*='reject']") ||
             Array.from(el.querySelectorAll("button")).find(b => /reject/i.test(b.textContent));
-          if (btn) { btn.click(); results.push({ ok: true, msg: `❌ Rejected — <strong>${action.description}</strong>` }); }
-          else results.push({ ok: false, msg: `⚠️ No reject button in row: <strong>${action.description}</strong>` });
+          if (btn) { btn.click(); ok = true;  msg = `❌ Rejected — <strong>${action.description}</strong>`; }
+          else      {             ok = false; msg = `⚠️ No reject button in row: <strong>${action.description}</strong>`; }
 
         } else if (action.type === "escalate_row") {
           const btn = el.querySelector(".btn-escalate,[class*='escalate']") ||
             Array.from(el.querySelectorAll("button")).find(b => /escalate|flag|hold/i.test(b.textContent));
-          if (btn) { btn.click(); results.push({ ok: true, msg: `⚠️ Escalated — <strong>${action.description}</strong>` }); }
-          else {
-            el.style.background = "#fff8e1"; el.style.outline = "2px solid #f57f17";
-            results.push({ ok: true, msg: `⚠️ Flagged for escalation — <strong>${action.description}</strong>` });
+          if (btn) {
+            btn.click();
+            ok  = true;
+            msg = `⚠️ Escalated — <strong>${action.description}</strong>`;
+          } else {
+            el.style.background = "#fff8e1";
+            el.style.outline    = "2px solid #f57f17";
+            ok  = true;
+            msg = `⚠️ Flagged for escalation — <strong>${action.description}</strong>`;
           }
 
         } else if (action.type === "navigate") {
-          // Save intent-based continuation so the next page can re-plan with fresh element IDs.
-          // We do NOT save the raw remaining actions — those carry afIds/elementIds that belong
-          // to THIS page and will not exist on the destination page.
           const remaining = actions.slice(i + 1);
           if (remaining.length > 0) {
             savePendingContinuation({
               originalCommand: pendingPlan?.originalCommand || "",
               taskType:        pendingPlan?.taskType        || "task",
-              // Describe what was already done so the AI has context
-              stepsCompleted:  actions.slice(0, i)
-                                 .map(a => a.description).filter(Boolean),
-              // Describe what still needs to happen — natural language, no element refs
+              stepsCompleted:  actions.slice(0, i).map(a => a.description).filter(Boolean),
               stepsRemaining:  remaining.map(a => ({
                 description: a.description,
                 type:        a.type,
-                value:       a.value       || null,
-                elementId:   a.elementId   || null   // kept for static/known IDs only
+                value:       a.value     || null,
+                elementId:   a.elementId || null
               })),
               fromPage: document.title,
               fromUrl:  window.location.href
             });
           }
-          results.push({ ok: true, msg: `🔗 Navigating to <strong>${action.description}</strong>…` });
+
+          ok  = true;
+          msg = `🔗 Navigating to <strong>${action.description}</strong>…`;
+
+          // Record and show this action before the page unloads
+          results.push({ ok, msg });
+          auditDetails.push({ type: action.type, description: action.description, value: action.value||null, elementId: action.elementId||null, success: true, startedAt, completedAt: new Date().toISOString() });
+          addMsg("success", msg);
+
+          // ── Fire audit NOW — page is about to unload ─────────────────────
+          // Use sendBeacon as a best-effort guarantee that the log reaches the
+          // server even if the page tears down mid-fetch.
+          const auditPayload = JSON.stringify({
+            command:       pendingPlan ? pendingPlan.originalCommand : "",
+            action:        pendingPlan ? pendingPlan.taskType        : "task",
+            pageTitle:     document.title,
+            pageUrl:       window.location.href,
+            rowCount:      auditDetails.length,
+            results:       results.map(r => r.msg),
+            actionDetails: auditDetails,
+            operator:      { detectedName: detectOperator(), source: detectOperator() ? "page-scrape" : "unknown" },
+            device:        deviceInfo,
+            sessionId:     SESSION_KEY
+          });
+
+          const beaconSent = navigator.sendBeacon
+            ? navigator.sendBeacon(
+                BACKEND_URL + "/api/agent/confirm",
+                new Blob([auditPayload], { type: "application/json" })
+              )
+            : false;
+
+          // sendBeacon doesn't set custom headers — if it failed or isn't available,
+          // fall back to a regular fetch (may or may not complete before unload)
+          if (!beaconSent) {
+            fetchWithRetry(BACKEND_URL + "/api/agent/confirm", {
+              method:  "POST",
+              headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+              body:    auditPayload
+            }, { timeout: 5000, retries: 0 }).catch(() => {});
+          }
+
           await sleep(300);
           window.location.href = action.value;
           return; // stop — page is unloading
@@ -1262,43 +1343,39 @@ window.afDownloadFile = function(filename) {
           if (action.value === "bottom") window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
           if (action.value === "down")   window.scrollBy({ top: 300, behavior: "smooth" });
           if (action.value === "up")     window.scrollBy({ top: -300, behavior: "smooth" });
-          results.push({ ok: true, msg: `↕️ Scrolled <strong>${action.value}</strong>` });
+          ok  = true;
+          msg = `↕️ Scrolled <strong>${action.value}</strong>`;
 
         } else {
-          results.push({ ok: false, msg: "Unknown action type: " + action.type });
+          ok  = false;
+          msg = "Unknown action type: " + action.type;
         }
 
       } catch (err) {
-        results.push({ ok: false, msg: "Error: " + err.message });
+        ok  = false;
+        msg = "Error: " + err.message;
       }
+
+      results.push({ ok, msg });
+      auditDetails.push({
+        type:        action.type,
+        description: action.description,
+        value:       action.value     || null,
+        elementId:   action.elementId || null,
+        success:     ok,
+        startedAt,
+        completedAt: new Date().toISOString()
+      });
     }
 
+    // ── Display results ────────────────────────────────────────────────────
     const okMsgs  = results.filter(r => r.ok);
     const errMsgs = results.filter(r => !r.ok);
     if (okMsgs.length)  addMsg("success", okMsgs.map(r => r.msg).join("<br>"));
     if (errMsgs.length) addMsg("error",   errMsgs.map(r => r.msg).join("<br>"));
 
-    // Audit trail (fire-and-forget — failure must never block the user)
-    const operator = detectOperator();
-    fetchWithRetry(BACKEND_URL + "/api/agent/confirm", {
-      method: "POST",
-      headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
-      body: JSON.stringify({
-        command:   pendingPlan ? pendingPlan.originalCommand : "",
-        action:    pendingPlan ? pendingPlan.taskType : "task",
-        pageTitle: document.title,
-        pageUrl:   window.location.href,
-        rowCount:  actions.length,
-        results:   results.map(r => r.msg),
-        actionDetails: actions.map(a => {
-          const match = results.find(r => r.msg && r.msg.includes(a.description));
-          return { type: a.type, description: a.description, value: a.value||null, elementId: a.elementId||null, success: match ? match.ok : null };
-        }),
-        operator: { detectedName: operator, source: operator ? "page-scrape" : "unknown" },
-        device:    deviceInfo,
-        sessionId: SESSION_KEY
-      })
-    }, { timeout: 10000, retries: 2 }).catch(() => {});
+    // ── Audit trail (fire-and-forget) ──────────────────────────────────────
+    fireAudit(auditDetails);
   }
 
   // ── Confirm card ──────────────────────────────────────
