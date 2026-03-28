@@ -30,6 +30,45 @@
   let attachments         = [];   // [{ name, type, size, dataUrl, text }]
   const SESSION_KEY       = "af_conv_" + (API_KEY || "default");
 
+  // ── Session stats — tracked per widget session ────────────────────────
+  // Populated from the `usage` field returned by the backend /message endpoint.
+  // Shown in the widget header and as a subtle footer line.
+  let sessionStats = {
+    messages:     0,
+    inputTokens:  0,
+    outputTokens: 0
+  };
+
+  function fmtTok(n) {
+    if (!n || n === 0) return "0";
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+    if (n >= 1_000)     return (n / 1_000).toFixed(1) + "k";
+    return String(n);
+  }
+
+  function updateSessionBar() {
+    const bar = document.getElementById("af-session-bar");
+    if (!bar) return;
+
+    // Show bar only once at least 1 message has been sent
+    if (sessionStats.messages === 0) { bar.classList.add("hidden"); return; }
+    bar.classList.remove("hidden");
+
+    // Claude Sonnet pricing: $3/M in · $15/M out
+    const cost = (sessionStats.inputTokens  / 1_000_000) * 3.00
+               + (sessionStats.outputTokens / 1_000_000) * 15.00;
+
+    const msgs   = document.getElementById("af-sb-msgs");
+    const inEl   = document.getElementById("af-sb-in");
+    const outEl  = document.getElementById("af-sb-out");
+    const costEl = document.getElementById("af-sb-cost");
+
+    if (msgs)   msgs.textContent   = sessionStats.messages;
+    if (inEl)   inEl.textContent   = fmtTok(sessionStats.inputTokens);
+    if (outEl)  outEl.textContent  = fmtTok(sessionStats.outputTokens);
+    if (costEl) costEl.textContent = cost.toFixed(6);
+  }
+
   // ── Network / connection state ────────────────────────
   // 'ok' | 'slow' | 'offline'
   let networkStatus   = "ok";
@@ -557,6 +596,20 @@
 
 /* Files Panel Loader */
 .af-fp-loading { text-align: center; padding: 20px; color: #888; font-size: 13px; }
+
+    /* ── Session stats bar ── */
+    #af-session-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 14px; background: ${theme.primary}22;
+      border-bottom: 1px solid ${theme.primary}22;
+      font-size: 10px; color: ${theme.primary}; flex-shrink: 0;
+      font-family: monospace; letter-spacing: 0.2px;
+      transition: opacity 0.3s;
+    }
+    #af-session-bar.hidden { display: none; }
+    #af-session-bar .af-sb-item { display: flex; align-items: center; gap: 4px; }
+    #af-session-bar .af-sb-sep { opacity: 0.3; margin: 0 6px; }
+    #af-session-bar .af-sb-cost { color: #27ae60; font-weight: 700; }
   `;
   document.head.appendChild(style);
 
@@ -588,6 +641,16 @@
       <span class="af-nb-icon" id="af-nb-icon">⚠️</span>
       <span class="af-nb-msg"  id="af-nb-msg">Connection issue</span>
       <button class="af-nb-retry" id="af-nb-retry">Retry</button>
+    </div>
+    <!-- Session stats bar -->
+    <div id="af-session-bar" class="hidden">
+      <div class="af-sb-item">💬 <span id="af-sb-msgs">0</span> msg</div>
+      <div class="af-sb-sep">·</div>
+      <div class="af-sb-item">⬆ <span id="af-sb-in">0</span></div>
+      <div class="af-sb-sep">·</div>
+      <div class="af-sb-item">⬇ <span id="af-sb-out">0</span></div>
+      <div class="af-sb-sep">·</div>
+      <div class="af-sb-item af-sb-cost">~$<span id="af-sb-cost">0.000000</span></div>
     </div>
     <!-- Files panel overlay -->
     <div id="af-files-panel">
@@ -656,6 +719,9 @@
   function clearSession() {
     try { sessionStorage.removeItem(SESSION_KEY); } catch {}
     conversationHistory = [];
+    // Reset session stats too
+    sessionStats = { messages: 0, inputTokens: 0, outputTokens: 0 };
+    updateSessionBar();
   }
 
   // ── Message helpers ───────────────────────────────────
@@ -1663,7 +1729,18 @@ window.afDownloadFile = function(filename) {
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Unknown error");
 
-    // 7. Handle different response types (Chat, Page Tasks, or File Operations)
+    // ── Track session token usage ─────────────────────────────────────────
+    // The backend returns data.usage when token tracking is enabled.
+    if (data.usage) {
+      sessionStats.messages++;
+      sessionStats.inputTokens  += data.usage.inputTokens  || 0;
+      sessionStats.outputTokens += data.usage.outputTokens || 0;
+      updateSessionBar();
+    } else {
+      // Still increment message count even if usage isn't available yet
+      sessionStats.messages++;
+      updateSessionBar();
+    }
     // ── Robust JSON extractor: mirrors backend extractJSON logic ─────────
     // Finds and returns the first complete JSON object inside any string,
     // even if the model added a preamble, trailing text, or markdown fences.
