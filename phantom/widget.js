@@ -1881,50 +1881,76 @@ window.afDownloadFile = function(filename) {
         return ((s.inputTokens / 1_000_000) * 3 + (s.outputTokens / 1_000_000) * 15).toFixed(6);
       }
 
+      function buildBar(pct) {
+  const filled = Math.round(pct / 10);
+  const empty  = 10 - filled;
+  return "&#9632;".repeat(filled) + "&#9633;".repeat(empty); // ■■■□□□
+}
+
       function renderUsageCard(monthly) {
-        const msgs = document.getElementById("af-messages");
-        const card = document.createElement("div");
-        card.className = "af-usage-card";
+  const msgs = document.getElementById("af-messages");
+  const card = document.createElement("div");
+  card.className = "af-usage-card";
 
-        const monthlyRow = monthly ? `
-          <div class="af-usage-cell full">
-            <div class="af-uc-label">📅 This month (${monthly.month})</div>
-            <div class="af-uc-value" style="font-size:15px;color:#0052cc;">
-              ${fmtM(monthly.inputTokens)} in &nbsp;·&nbsp; ${fmtM(monthly.outputTokens)} out
-            </div>
-            <div class="af-uc-sub">Cumulative AI cost: $${(monthly.totalCostUsd || 0).toFixed(4)}</div>
-          </div>` : `
-          <div class="af-usage-cell full">
-            <div class="af-uc-label">📅 Monthly totals</div>
-            <div class="af-uc-value" style="font-size:13px;color:#bbb;">Unavailable</div>
-            <div class="af-uc-sub">Backend billing route not reachable</div>
-          </div>`;
+  let body = "";
 
-        card.innerHTML = `
-          <div class="af-usage-header">📊 Usage Stats</div>
-          <div class="af-usage-grid">
-            <div class="af-usage-cell">
-              <div class="af-uc-label">💬 Session messages</div>
-              <div class="af-uc-value">${sessionStats.messages}</div>
-              <div class="af-uc-sub">Since chat opened</div>
-            </div>
-            <div class="af-usage-cell">
-              <div class="af-uc-label">🔢 Session tokens</div>
-              <div class="af-uc-value">${fmtM(sessionStats.inputTokens + sessionStats.outputTokens)}</div>
-              <div class="af-uc-sub">${fmtM(sessionStats.inputTokens)} in · ${fmtM(sessionStats.outputTokens)} out</div>
-            </div>
-            <div class="af-usage-cell full">
-              <div class="af-uc-label">💰 Estimated session cost</div>
-              <div class="af-uc-value" style="color:#27ae60;">$${sessionCost(sessionStats)}</div>
-              <div class="af-uc-sub">Based on current model pricing</div>
-            </div>
-            ${monthlyRow}
-          </div>
-          <div class="af-usage-footer">Type /learn to teach the AI this page &nbsp;·&nbsp; /usage to see stats</div>
-        `;
-        msgs.appendChild(card);
-        requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
-      }
+  if (!monthly) {
+    body = `
+      <div class="af-usage-cell full">
+        <div class="af-uc-label">Usage</div>
+        <div class="af-uc-value" style="font-size:14px;color:#bbb;">Unavailable</div>
+        <div class="af-uc-sub">Could not reach server</div>
+      </div>`;
+  } else {
+    // ── Tokens remaining ─────────────────────────────────────────────
+    const limited = monthly.tokenLimitMonthly > 0;
+    const left    = monthly.tokensLeft;
+    const used    = monthly.tokensUsed || 0;
+
+    let tokenLine, tokenSub;
+    if (limited) {
+      const pct  = Math.min(100, Math.round((used / monthly.tokenLimitMonthly) * 100));
+      const bar  = buildBar(pct);
+      tokenLine  = fmtTok(left) + " tokens left";
+      tokenSub   = `${fmtTok(used)} of ${fmtTok(monthly.tokenLimitMonthly)} used &nbsp;${bar}&nbsp; ${pct}%`;
+    } else {
+      tokenLine = fmtTok(used) + " tokens used";
+      tokenSub  = "No limit set — contact your admin";
+    }
+
+    // ── Recharge date ────────────────────────────────────────────────
+    let rechargeText = "—";
+    if (monthly.rechargedOn) {
+      const d = new Date(monthly.rechargedOn);
+      rechargeText = d.toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" });
+    }
+
+    // ── Naira charge ─────────────────────────────────────────────────
+    const ngnLine = monthly.chargeNgn > 0
+      ? `₦${monthly.chargeNgn.toLocaleString()} charged this month`
+      : "No charges yet this month";
+
+    body = `
+      <div class="af-usage-cell full">
+        <div class="af-uc-label">🔋 Tokens remaining</div>
+        <div class="af-uc-value">${tokenLine}</div>
+        <div class="af-uc-sub">${tokenSub}</div>
+      </div>
+      <div class="af-usage-cell full" style="border-top:1px solid #f0f0f0;">
+        <div class="af-uc-label">📅 Recharged on</div>
+        <div class="af-uc-value" style="font-size:15px;">${rechargeText}</div>
+        <div class="af-uc-sub">${ngnLine}</div>
+      </div>`;
+  }
+
+  card.innerHTML = `
+    <div class="af-usage-header">🔋 Your Balance</div>
+    <div class="af-usage-grid">${body}</div>
+    <div class="af-usage-footer">Resets on the 1st of every month &nbsp;·&nbsp; /usage to refresh</div>
+  `;
+  msgs.appendChild(card);
+  requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
+}
 
       // Attempt to fetch monthly totals from backend; fall back to session-only if unavailable
       fetchWithRetry(BACKEND_URL + "/api/agent/billing", {
