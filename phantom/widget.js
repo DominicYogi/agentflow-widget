@@ -32,7 +32,7 @@
 
   // ── Session stats — tracked per widget session ────────────────────────
   // Populated from the `usage` field returned by the backend /message endpoint.
-  // Shown in the widget header and as a subtle footer line.
+  // Accessible via the /usage command.
   let sessionStats = {
     messages:     0,
     inputTokens:  0,
@@ -44,29 +44,6 @@
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
     if (n >= 1_000)     return (n / 1_000).toFixed(1) + "k";
     return String(n);
-  }
-
-  function updateSessionBar() {
-    const bar = document.getElementById("af-session-bar");
-    if (!bar) return;
-
-    // Show bar only once at least 1 message has been sent
-    if (sessionStats.messages === 0) { bar.classList.add("hidden"); return; }
-    bar.classList.remove("hidden");
-
-    // Claude Sonnet pricing: $3/M in · $15/M out
-    const cost = (sessionStats.inputTokens  / 1_000_000) * 3.00
-               + (sessionStats.outputTokens / 1_000_000) * 15.00;
-
-    const msgs   = document.getElementById("af-sb-msgs");
-    const inEl   = document.getElementById("af-sb-in");
-    const outEl  = document.getElementById("af-sb-out");
-    const costEl = document.getElementById("af-sb-cost");
-
-    if (msgs)   msgs.textContent   = sessionStats.messages;
-    if (inEl)   inEl.textContent   = fmtTok(sessionStats.inputTokens);
-    if (outEl)  outEl.textContent  = fmtTok(sessionStats.outputTokens);
-    if (costEl) costEl.textContent = cost.toFixed(6);
   }
 
   // ── Network / connection state ────────────────────────
@@ -597,19 +574,34 @@
 /* Files Panel Loader */
 .af-fp-loading { text-align: center; padding: 20px; color: #888; font-size: 13px; }
 
-    /* ── Session stats bar ── */
-    #af-session-bar {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 4px 14px; background: ${theme.primary}22;
-      border-bottom: 1px solid ${theme.primary}22;
-      font-size: 10px; color: ${theme.primary}; flex-shrink: 0;
-      font-family: monospace; letter-spacing: 0.2px;
-      transition: opacity 0.3s;
+    /* ── Usage card (shown by /usage command) ── */
+    .af-usage-card {
+      background: white; border: 1.5px solid ${theme.primary}33;
+      border-radius: 14px; align-self: flex-start; width: 92%;
+      box-shadow: 0 3px 14px rgba(0,0,0,0.07); overflow: hidden;
+      flex-shrink: 0;
     }
-    #af-session-bar.hidden { display: none; }
-    #af-session-bar .af-sb-item { display: flex; align-items: center; gap: 4px; }
-    #af-session-bar .af-sb-sep { opacity: 0.3; margin: 0 6px; }
-    #af-session-bar .af-sb-cost { color: #27ae60; font-weight: 700; }
+    .af-usage-header {
+      background: ${theme.primary}; color: white;
+      padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 700;
+    }
+    .af-usage-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 1px; background: #f0f0f0; border-top: 1px solid #f0f0f0;
+    }
+    .af-usage-cell {
+      background: white; padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .af-usage-cell.full { grid-column: 1 / -1; }
+    .af-uc-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+    .af-uc-value { font-size: 18px; font-weight: 800; color: #111; font-family: monospace; }
+    .af-uc-sub   { font-size: 10px; color: #bbb; margin-top: 1px; }
+    .af-usage-footer {
+      padding: 8px 14px; border-top: 1px solid #f0f0f0;
+      font-size: 10px; color: #bbb; text-align: center;
+    }
   `;
   document.head.appendChild(style);
 
@@ -642,16 +634,7 @@
       <span class="af-nb-msg"  id="af-nb-msg">Connection issue</span>
       <button class="af-nb-retry" id="af-nb-retry">Retry</button>
     </div>
-    <!-- Session stats bar -->
-    <div id="af-session-bar" class="hidden">
-      <div class="af-sb-item">💬 <span id="af-sb-msgs">0</span> msg</div>
-      <div class="af-sb-sep">·</div>
-      <div class="af-sb-item">⬆ <span id="af-sb-in">0</span></div>
-      <div class="af-sb-sep">·</div>
-      <div class="af-sb-item">⬇ <span id="af-sb-out">0</span></div>
-      <div class="af-sb-sep">·</div>
-      <div class="af-sb-item af-sb-cost">~$<span id="af-sb-cost">0.000000</span></div>
-    </div>
+    <!-- session bar removed — use /usage command instead -->
     <!-- Files panel overlay -->
     <div id="af-files-panel">
       <div class="af-fp-header">
@@ -721,7 +704,6 @@
     conversationHistory = [];
     // Reset session stats too
     sessionStats = { messages: 0, inputTokens: 0, outputTokens: 0 };
-    updateSessionBar();
   }
 
   // ── Message helpers ───────────────────────────────────
@@ -1735,11 +1717,9 @@ window.afDownloadFile = function(filename) {
       sessionStats.messages++;
       sessionStats.inputTokens  += data.usage.inputTokens  || 0;
       sessionStats.outputTokens += data.usage.outputTokens || 0;
-      updateSessionBar();
     } else {
       // Still increment message count even if usage isn't available yet
       sessionStats.messages++;
-      updateSessionBar();
     }
     // ── Robust JSON extractor: mirrors backend extractJSON logic ─────────
     // Finds and returns the first complete JSON object inside any string,
@@ -1886,6 +1866,77 @@ window.afDownloadFile = function(filename) {
       return;
     }
     // ---------------------------------------------------------
+
+    // --- /usage command — show session + monthly token stats ---
+    if (text === "/usage") {
+      input.value = "";
+
+      function fmtM(n) {
+        if (!n) return "0";
+        if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
+        if (n >= 1_000)     return (n / 1_000).toFixed(1) + "k";
+        return String(n);
+      }
+      function sessionCost(s) {
+        return ((s.inputTokens / 1_000_000) * 3 + (s.outputTokens / 1_000_000) * 15).toFixed(6);
+      }
+
+      function renderUsageCard(monthly) {
+        const msgs = document.getElementById("af-messages");
+        const card = document.createElement("div");
+        card.className = "af-usage-card";
+
+        const monthlyRow = monthly ? `
+          <div class="af-usage-cell full">
+            <div class="af-uc-label">📅 This month (${monthly.month})</div>
+            <div class="af-uc-value" style="font-size:15px;color:#0052cc;">
+              ${fmtM(monthly.inputTokens)} in &nbsp;·&nbsp; ${fmtM(monthly.outputTokens)} out
+            </div>
+            <div class="af-uc-sub">Cumulative AI cost: $${(monthly.totalCostUsd || 0).toFixed(4)}</div>
+          </div>` : `
+          <div class="af-usage-cell full">
+            <div class="af-uc-label">📅 Monthly totals</div>
+            <div class="af-uc-value" style="font-size:13px;color:#bbb;">Unavailable</div>
+            <div class="af-uc-sub">Backend billing route not reachable</div>
+          </div>`;
+
+        card.innerHTML = `
+          <div class="af-usage-header">📊 Usage Stats</div>
+          <div class="af-usage-grid">
+            <div class="af-usage-cell">
+              <div class="af-uc-label">💬 Session messages</div>
+              <div class="af-uc-value">${sessionStats.messages}</div>
+              <div class="af-uc-sub">Since chat opened</div>
+            </div>
+            <div class="af-usage-cell">
+              <div class="af-uc-label">🔢 Session tokens</div>
+              <div class="af-uc-value">${fmtM(sessionStats.inputTokens + sessionStats.outputTokens)}</div>
+              <div class="af-uc-sub">${fmtM(sessionStats.inputTokens)} in · ${fmtM(sessionStats.outputTokens)} out</div>
+            </div>
+            <div class="af-usage-cell full">
+              <div class="af-uc-label">💰 Estimated session cost</div>
+              <div class="af-uc-value" style="color:#27ae60;">$${sessionCost(sessionStats)}</div>
+              <div class="af-uc-sub">Based on current model pricing</div>
+            </div>
+            ${monthlyRow}
+          </div>
+          <div class="af-usage-footer">Type /learn to teach the AI this page &nbsp;·&nbsp; /usage to see stats</div>
+        `;
+        msgs.appendChild(card);
+        requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
+      }
+
+      // Attempt to fetch monthly totals from backend; fall back to session-only if unavailable
+      fetchWithRetry(BACKEND_URL + "/api/agent/billing", {
+        headers: { "x-api-key": API_KEY }
+      }, { timeout: 8000, retries: 1 })
+      .then(r => r.json())
+      .then(d => renderUsageCard(d.success ? d.current : null))
+      .catch(() => renderUsageCard(null));
+
+      return;
+    }
+    // -----------------------------------------------------------
 
     if (!text && attachments.length === 0) return;
     const msg = text || (attachments.length > 0 ? "I've attached " + attachments.length + " file(s). Please review." : "");
