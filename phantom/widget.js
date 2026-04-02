@@ -866,16 +866,35 @@
   updateFilesBadge();
 }
 
-  function updateFilesBadge() {
-    const files  = loadStoredFiles();
-    const badge  = document.getElementById("af-files-badge");
+   function updateFilesBadge() {
+    const badge = document.getElementById("af-files-badge");
     if (!badge) return;
-    if (files.length > 0) {
-      badge.style.display = "flex";
-      badge.textContent   = files.length > 9 ? "9+" : String(files.length);
-    } else {
-      badge.style.display = "none";
-    }
+    // Fetch live count from server so badge is accurate after browser restarts
+    fetchWithTimeout(
+      `${BACKEND_URL}/api/agent/workspace?deviceId=${encodeURIComponent(deviceInfo.deviceId)}`,
+      { headers: { "x-api-key": API_KEY, "ngrok-skip-browser-warning": "true" } },
+      8000
+    )
+    .then(r => r.json())
+    .then(data => {
+      const count = (data.files || []).length;
+      if (count > 0) {
+        badge.style.display = "flex";
+        badge.textContent   = count > 9 ? "9+" : String(count);
+      } else {
+        badge.style.display = "none";
+      }
+    })
+    .catch(() => {
+      // Fallback to localStorage count if server is unreachable
+      const files = loadStoredFiles();
+      if (files.length > 0) {
+        badge.style.display = "flex";
+        badge.textContent   = files.length > 9 ? "9+" : String(files.length);
+      } else {
+        badge.style.display = "none";
+      }
+    });
   }
 
   function formatBytes(bytes) {
@@ -940,13 +959,16 @@ async function renderFilesPanel() {
 
 // ── New: Delete Specific File ────────────────────────
 window.afDeleteFile = async function(filename) {
-  if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
-
-  try {
-    const res = await fetchWithRetry(`${BACKEND_URL}/api/agent/workspace/${encodeURIComponent(filename)}`, {
-      method: "DELETE",
-      headers: { "x-api-key": API_KEY }
-    }, { timeout: adaptiveTimeout(10000), retries: 1 });
+    if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
+ 
+    try {
+      const res = await fetchWithRetry(`${BACKEND_URL}/api/agent/workspace/${encodeURIComponent(filename)}`, {
+        method: "DELETE",
+        headers: {
+          "x-api-key":    API_KEY,
+          "x-device-id":  deviceInfo.deviceId   // ← scopes deletion to this device's files only
+        }
+      }, { timeout: adaptiveTimeout(10000), retries: 1 });
     
     if (res.ok) {
       renderFilesPanel();
@@ -964,13 +986,14 @@ window.afDeleteFile = async function(filename) {
 
 // ── Update Download Helper ───────────────────────────
 window.afDownloadFile = function(filename) {
-  const downloadUrl = `${BACKEND_URL}/api/agent/workspace/${encodeURIComponent(filename)}?key=${encodeURIComponent(API_KEY)}`;
-  const a = document.createElement("a");
-  a.href = downloadUrl;
-  a.download = filename;
-  a.target = "_blank";
-  a.click();
-};
+    const downloadUrl = `${BACKEND_URL}/api/agent/workspace/${encodeURIComponent(filename)}` +
+      `?key=${encodeURIComponent(API_KEY)}&deviceId=${encodeURIComponent(deviceInfo.deviceId)}`;
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    a.target = "_blank";
+    a.click();
+  };
 
   // ── Wire up files panel toggle ─────────────────────────
   document.getElementById("af-files-btn").addEventListener("click", function() {
@@ -1480,10 +1503,12 @@ window.afDownloadFile = function(filename) {
         "<button class=\"af-dl-btn\">" + ICONS.download + " Download</button>" +
       "</div>";
     card.querySelector(".af-dl-btn").addEventListener("click", () => {
-      const downloadUrl = BACKEND_URL + dl.url + "?key=" + encodeURIComponent(API_KEY);
-      const a = document.createElement("a");
-      a.href = downloadUrl; a.download = dl.filename; a.target = "_blank"; a.click();
-    });
+        const downloadUrl = BACKEND_URL + dl.url +
+          "?key=" + encodeURIComponent(API_KEY) +
+          "&deviceId=" + encodeURIComponent(deviceInfo.deviceId);
+        const a = document.createElement("a");
+        a.href = downloadUrl; a.download = dl.filename; a.target = "_blank"; a.click();
+      });
     msgs.appendChild(card);
   });
   updateFilesBadge();
@@ -1693,10 +1718,11 @@ window.afDownloadFile = function(filename) {
         "ngrok-skip-browser-warning": "true",
         "x-connection-quality": networkStatus   // hint for server-side adaptation
       },
-      body: JSON.stringify({
+     body: JSON.stringify({
         message: message,
         pageContext,
         history: historyForAI,
+        device: deviceInfo,   // ← backend uses deviceInfo.deviceId to scope workspace files
         // Only images go in the body for the Vision path; docs are already in the workspace
         attachments: imageAttachments.length > 0 ? imageAttachments.map(a => ({
           name: a.name,
