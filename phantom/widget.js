@@ -248,6 +248,15 @@
     .af-msg.error   { background: #fdecea; color: #c62828; border: 1px solid #ffcdd2; align-self: flex-start; border-bottom-left-radius: 4px; font-size: 12.5px; }
     .af-msg.warning { background: #fff8e1; color: #e65100; border: 1px solid #ffe082; align-self: flex-start; border-bottom-left-radius: 4px; font-size: 12.5px; }
 
+    /* ── HTML formatting inside agent bubbles ── */
+    .af-msg.agent p          { margin: 0 0 6px 0; }
+    .af-msg.agent p:last-child { margin-bottom: 0; }
+    .af-msg.agent strong     { font-weight: 700; color: #111; }
+    .af-msg.agent ul,
+    .af-msg.agent ol         { margin: 6px 0 6px 16px; padding: 0; }
+    .af-msg.agent li         { margin-bottom: 4px; line-height: 1.5; }
+    .af-msg.agent br         { display: block; content: ""; margin-top: 4px; }
+
     /* ── Attachment preview inside messages ── */
     .af-msg-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .af-att-thumb {
@@ -1608,6 +1617,16 @@ window.afDownloadFile = function(filename) {
   function showFileSelectCard(prompt, files) {
     const msgs = document.getElementById("af-messages");
     const card = document.createElement("div");
+
+    // ── IMPORTANT: persist the agent's prompt into conversationHistory ──────
+    // Without this, the user's file-click arrives with two consecutive user
+    // turns and no assistant turn in between.  Anthropic rejects that; other
+    // providers silently get confused and return an empty reply ("Done.").
+    conversationHistory.push({
+      type: "agent",
+      html: prompt || "Which file should I use to answer your question?",
+      time: Date.now()
+    });
     card.className = "af-file-select-card";
 
     const FILE_ICONS = { csv:"📊", xlsx:"📊", xls:"📊", pdf:"📄", txt:"📋", md:"📋", docx:"📝", pptx:"📑", json:"🗂️" };
