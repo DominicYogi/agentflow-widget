@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AgentFlow — AI Agents for Enterprise Portals</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --black:       #0a0a0b;
+      --charcoal:    #111114;
+      --surface:     #18181c;
+      --card:        #1e1e23;
+      --border:      #2a2a32;
+      --border-soft: #222228;
+      --smoke:       #f5f5f3;
+      --smoke2:      #e8e8e5;
+      --gray:        #9898a0;
+      --gray2:       #6b6b74;
+      --navy:        #1a3a6b;
+      --navy-bright: #2251a8;
+      --navy-glow:   #2d5fc4;
+      --navy-light:  #4577e0;
+      --white:       #ffffff;
+      --text-primary:#f0f0ee;
+      --text-secondary:#a0a0aa;
+      --text-muted:  #5a5a64;
+
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body:    'Instrument Sans', sans-serif;
+      --font-serif:   'Instrument Serif', serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--black);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── Noise overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+      opacity: 0.4;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; height: 68px;
+      background: rgba(10,10,11,0.82);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none;
+    }
+    .nav-logo-mark {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--navy-glow), var(--navy-light));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; color: #fff;
+      font-family: var(--font-display);
+      letter-spacing: 0;
+      box-shadow: 0 0 20px rgba(45,95,196,0.35);
+    }
+    .nav-logo-text {
+      font-family: var(--font-display);
+      font-size: 22px; letter-spacing: 2px;
+      color: var(--smoke);
+    }
+
+    .nav-links {
+      display: flex; align-items: center; gap: 36px;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px; font-weight: 500;
+      letter-spacing: 0.3px;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--smoke); }
+
+    .nav-cta {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .btn-ghost-nav {
+      background: none; border: 1px solid var(--border);
+      color: var(--text-secondary); padding: 8px 20px;
+      border-radius: 6px; font-size: 14px; font-weight: 500;
+      cursor: pointer; transition: all 0.2s; font-family: var(--font-body);
+      text-decoration: none;
+    }
+    .btn-ghost-nav:hover { border-color: var(--navy-glow); color: var(--smoke); }
+
+    .btn-primary-nav {
+      background: var(--navy-bright); color: #fff;
+      border: none; padding: 8px 22px;
+      border-radius: 6px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; font-family: var(--font-body);
+      text-decoration: none; white-space: nowrap;
+      box-shadow: 0 0 0 0 rgba(34,81,168,0);
+    }
+    .btn-primary-nav:hover {
+      background: var(--navy-glow);
+      box-shadow: 0 4px 20px rgba(34,81,168,0.4);
+    }
+
+    /* ── HERO ── */
+    .hero {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 120px 48px 80px;
+      overflow: hidden;
+    }
+
+    /* Ambient gradient blobs */
+    .hero-glow-1 {
+      position: absolute; top: -10%; left: 50%; transform: translateX(-50%);
+      width: 900px; height: 500px;
+      background: radial-gradient(ellipse, rgba(34,81,168,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-glow-2 {
+      position: absolute; bottom: 0; left: -20%;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(26,58,107,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-glow-3 {
+      position: absolute; top: 30%; right: -10%;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(69,119,224,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* Grid lines */
+    .hero-grid {
+      position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(var(--border-soft) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border-soft) 1px, transparent 1px);
+      background-size: 64px 64px;
+      opacity: 0.35;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent);
+    }
+
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(34,81,168,0.12);
+      border: 1px solid rgba(34,81,168,0.3);
+      border-radius: 100px;
+      padding: 5px 16px;
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--navy-light);
+      margin-bottom: 32px;
+      animation: fadeUp 0.6s ease both;
+    }
+    .eyebrow-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--navy-light);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: clamp(72px, 9vw, 130px);
+      line-height: 0.92; letter-spacing: 3px;
+      text-align: center;
+      color: var(--smoke);
+      max-width: 1000px;
+      animation: fadeUp 0.6s 0.1s ease both;
+    }
+    .hero-title .title-accent {
+      color: transparent;
+      -webkit-text-stroke: 1.5px rgba(69,119,224,0.6);
+    }
+    .hero-title .title-blue {
+      background: linear-gradient(135deg, var(--navy-light), #7aabff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      margin-top: 28px;
+      font-size: 18px; line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 540px; text-align: center;
+      animation: fadeUp 0.6s 0.2s ease both;
+    }
+    .hero-sub em { font-style: italic; color: var(--smoke2); font-family: var(--font-serif); }
+
+    .hero-actions {
+      display: flex; align-items: center; gap: 16px;
+      margin-top: 44px;
+      animation: fadeUp 0.6s 0.3s ease both;
+    }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--navy-bright); color: #fff;
+      border: none; padding: 14px 32px;
+      border-radius: 8px; font-size: 15px; font-weight: 600;
+      cursor: pointer; font-family: var(--font-body);
+      text-decoration: none;
+      transition: all 0.25s;
+      box-shadow: 0 4px 24px rgba(34,81,168,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .btn-primary:hover {
+      background: var(--navy-glow);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 32px rgba(34,81,168,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .btn-primary svg { transition: transform 0.2s; }
+    .btn-primary:hover svg { transform: translateX(2px); }
+
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: none; color: var(--text-secondary);
+      border: 1px solid var(--border); padding: 14px 28px;
+      border-radius: 8px; font-size: 15px; font-weight: 500;
+      cursor: pointer; font-family: var(--font-body);
+      text-decoration: none; transition: all 0.25s;
+    }
+    .btn-outline:hover { border-color: var(--gray2); color: var(--smoke); }
+
+    /* Hero badge strip */
+    .hero-badges {
+      display: flex; align-items: center; gap: 24px;
+      margin-top: 56px;
+      animation: fadeUp 0.6s 0.4s ease both;
+    }
+    .hero-badge {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 13px; color: var(--text-muted); font-weight: 500;
+    }
+    .hero-badge svg { color: var(--navy-light); flex-shrink: 0; }
+    .badge-sep { width: 1px; height: 16px; background: var(--border); }
+
+    /* ── MOCKUP WINDOW ── */
+    .hero-mockup {
+      position: relative; z-index: 1;
+      width: min(900px, 90vw);
+      margin: 60px auto 0;
+      animation: fadeUp 0.8s 0.5s ease both;
+    }
+
+    .mockup-browser {
+      background: var(--charcoal);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03);
+    }
+    .mockup-bar {
+      background: var(--surface);
+      padding: 12px 16px;
+      display: flex; align-items: center; gap: 12px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .mockup-dots { display: flex; gap: 6px; }
+    .mockup-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+    }
+    .mockup-dot:nth-child(1) { background: #ff5f57; }
+    .mockup-dot:nth-child(2) { background: #febc2e; }
+    .mockup-dot:nth-child(3) { background: #28c840; }
+    .mockup-url-bar {
+      flex: 1; background: var(--card);
+      border-radius: 6px; padding: 5px 12px;
+      font-size: 12px; color: var(--text-muted);
+      border: 1px solid var(--border-soft);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .mockup-url-bar svg { color: var(--navy-light); }
+
+    .mockup-body {
+      display: flex; height: 380px;
+    }
+
+    .mock-sidebar {
+      width: 200px; background: #111116;
+      border-right: 1px solid var(--border-soft);
+      padding: 16px 0;
+      flex-shrink: 0;
+    }
+    .mock-brand {
+      padding: 0 16px 16px;
+      border-bottom: 1px solid var(--border-soft);
+      margin-bottom: 12px;
+    }
+    .mock-brand-name {
+      font-size: 13px; font-weight: 700; color: var(--smoke);
+    }
+    .mock-brand-sub { font-size: 10px; color: var(--text-muted); }
+    .mock-nav-group { padding: 0 8px; margin-bottom: 4px; }
+    .mock-nav-label {
+      font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--text-muted);
+      padding: 8px 8px 4px;
+    }
+    .mock-nav-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 8px; border-radius: 6px;
+      font-size: 11px; color: var(--text-secondary);
+      cursor: default;
+    }
+    .mock-nav-item.active {
+      background: rgba(34,81,168,0.18);
+      color: var(--navy-light);
+    }
+    .mock-nav-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--border); flex-shrink: 0;
+    }
+    .mock-nav-item.active .mock-nav-dot { background: var(--navy-light); }
+
+    .mock-main { flex: 1; padding: 16px; overflow: hidden; position: relative; }
+
+    .mock-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .mock-page-title { font-size: 15px; font-weight: 700; color: var(--smoke); }
+    .mock-badge-row { display: flex; gap: 6px; }
+    .mock-badge {
+      font-size: 9px; padding: 2px 8px; border-radius: 100px;
+      font-weight: 600; letter-spacing: 0.5px;
+    }
+    .mock-badge-blue { background: rgba(34,81,168,0.18); color: var(--navy-light); }
+    .mock-badge-green { background: rgba(39,174,96,0.15); color: #4ade80; }
+
+    .mock-stats {
+      display: grid; grid-template-columns: repeat(4,1fr); gap: 8px;
+      margin-bottom: 12px;
+    }
+    .mock-stat {
+      background: var(--card);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px; padding: 10px;
+    }
+    .mock-stat-label { font-size: 9px; color: var(--text-muted); margin-bottom: 3px; }
+    .mock-stat-val { font-size: 18px; font-weight: 700; color: var(--smoke); }
+    .mock-stat-val.blue { color: var(--navy-light); }
+    .mock-stat-val.green { color: #4ade80; }
+    .mock-stat-val.amber { color: #fbbf24; }
+
+    .mock-table-header {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+      padding: 6px 10px; font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.8px;
+      color: var(--text-muted); font-weight: 600;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .mock-table-row {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+      padding: 7px 10px; font-size: 10px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      align-items: center;
+    }
+    .mock-status {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 9px; padding: 2px 7px; border-radius: 100px; font-weight: 600;
+    }
+    .status-pending { background: rgba(251,191,36,0.12); color: #fbbf24; }
+    .status-approved { background: rgba(74,222,128,0.12); color: #4ade80; }
+    .status-review { background: rgba(69,119,224,0.12); color: var(--navy-light); }
+
+    /* AI widget floating */
+    .mock-widget {
+      position: absolute; bottom: 16px; right: 16px;
+      width: 220px;
+      background: var(--charcoal);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+      overflow: hidden;
+    }
+    .mock-widget-head {
+      background: var(--navy-bright);
+      padding: 8px 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .mock-widget-avatar {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+    }
+    .mock-widget-title { font-size: 11px; font-weight: 700; color: #fff; }
+    .mock-widget-sub { font-size: 9px; color: rgba(255,255,255,0.65); }
+    .mock-widget-body { padding: 10px; }
+    .mock-msg {
+      border-radius: 8px; padding: 6px 9px;
+      font-size: 10px; line-height: 1.4; margin-bottom: 5px;
+      max-width: 90%;
+    }
+    .msg-bot { background: var(--surface); color: var(--text-secondary); }
+    .msg-user {
+      background: rgba(34,81,168,0.25); color: var(--navy-light);
+      margin-left: auto;
+    }
+    .mock-input-row {
+      display: flex; align-items: center; gap: 5px;
+      margin-top: 8px;
+    }
+    .mock-input {
+      flex: 1; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 5px 8px; font-size: 9px; color: var(--text-muted);
+    }
+    .mock-send-btn {
+      width: 22px; height: 22px; border-radius: 5px;
+      background: var(--navy-bright);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: #fff;
+    }
+
+    /* Typing dots animation */
+    .typing-dot {
+      display: inline-block; width: 4px; height: 4px;
+      border-radius: 50%; background: var(--navy-light);
+      margin: 0 1px;
+      animation: blink 1.4s infinite both;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%, 80%, 100% { opacity: 0; } 40% { opacity: 1; } }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── LOGOS STRIP ── */
+    .logos-strip {
+      position: relative; z-index: 1;
+      padding: 48px 48px 0;
+      text-align: center;
+    }
+    .logos-label {
+      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+      font-weight: 600; color: var(--text-muted); margin-bottom: 28px;
+    }
+    .logos-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 48px; flex-wrap: wrap;
+    }
+    .logo-item {
+      font-family: var(--font-display);
+      font-size: 20px; letter-spacing: 3px;
+      color: var(--text-muted); opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+    .logo-item:hover { opacity: 0.9; }
+
+    /* ── SECTION COMMON ── */
+    section { position: relative; z-index: 1; }
+
+    .section-label {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--navy-light);
+      margin-bottom: 16px;
+    }
+    .section-label::before {
+      content: ''; display: block; width: 20px; height: 1px;
+      background: var(--navy-light);
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-size: clamp(38px, 5vw, 64px);
+      line-height: 1; letter-spacing: 2px;
+      color: var(--smoke);
+    }
+    .section-title .serif {
+      font-family: var(--font-serif);
+      font-style: italic;
+      color: transparent;
+      -webkit-text-stroke: 1.5px var(--smoke2);
+    }
+
+    .section-body {
+      font-size: 17px; color: var(--text-secondary);
+      line-height: 1.7; max-width: 480px;
+      margin-top: 16px;
+    }
+
+    /* ── FEATURES ── */
+    .features {
+      padding: 100px 48px;
+    }
+
+    .features-top {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 64px; align-items: start;
+      max-width: 1200px; margin: 0 auto 72px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border-soft);
+      border: 1px solid var(--border-soft);
+      border-radius: 16px; overflow: hidden;
+      max-width: 1200px; margin: 0 auto;
+    }
+
+    .feature-card {
+      background: var(--charcoal);
+      padding: 36px;
+      transition: background 0.2s;
+      position: relative; overflow: hidden;
+    }
+    .feature-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(34,81,168,0.04), transparent);
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .feature-card:hover { background: var(--surface); }
+    .feature-card:hover::before { opacity: 1; }
+
+    .feature-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: rgba(34,81,168,0.12);
+      border: 1px solid rgba(34,81,168,0.2);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 20px;
+    }
+    .feature-icon svg { color: var(--navy-light); }
+
+    .feature-title {
+      font-size: 16px; font-weight: 700;
+      color: var(--smoke); margin-bottom: 10px;
+      letter-spacing: 0.2px;
+    }
+    .feature-desc {
+      font-size: 14px; color: var(--text-secondary); line-height: 1.65;
+    }
+
+    /* ── HOW IT WORKS ── */
+    .how {
+      padding: 100px 48px;
+      background: var(--charcoal);
+      border-top: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .how-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 80px; align-items: center;
+    }
+
+    .steps {
+      display: flex; flex-direction: column; gap: 0;
+      margin-top: 40px;
+    }
+    .step {
+      display: flex; gap: 20px;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border-soft);
+      position: relative;
+    }
+    .step:last-child { border-bottom: none; }
+
+    .step-number {
+      width: 36px; height: 36px; flex-shrink: 0;
+      border-radius: 50%;
+      background: var(--surface); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display);
+      font-size: 16px; letter-spacing: 0;
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+    .step:hover .step-number {
+      background: rgba(34,81,168,0.15);
+      border-color: rgba(34,81,168,0.4);
+      color: var(--navy-light);
+    }
+
+    .step-content {}
+    .step-title { font-size: 16px; font-weight: 700; color: var(--smoke); margin-bottom: 6px; }
+    .step-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+    .code-block {
+      background: var(--black);
+      border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .code-header {
+      background: var(--surface);
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .code-title { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+    .code-lang {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--navy-light);
+      background: rgba(34,81,168,0.12);
+      padding: 2px 8px; border-radius: 4px;
+    }
+    .code-body { padding: 24px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.8; }
+    .c-comment { color: #4a5568; }
+    .c-key { color: #7aabff; }
+    .c-string { color: #a8d4a8; }
+    .c-tag { color: var(--navy-light); }
+    .c-attr { color: #f6c90e; }
+    .c-val { color: #a8d4a8; }
+
+    /* ── USE CASES ── */
+    .usecases {
+      padding: 100px 48px;
+    }
+    .usecases-inner { max-width: 1200px; margin: 0 auto; }
+    .usecases-header { text-align: center; margin-bottom: 64px; }
+    .usecases-header .section-label { justify-content: center; }
+    .usecases-header .section-body { margin: 16px auto 0; text-align: center; }
+
+    .cases-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+
+    .case-card {
+      background: var(--charcoal);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 32px;
+      transition: all 0.25s;
+      cursor: default;
+    }
+    .case-card:hover {
+      border-color: rgba(34,81,168,0.3);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3), 0 0 20px rgba(34,81,168,0.05);
+    }
+    .case-icon {
+      font-size: 32px; margin-bottom: 16px;
+      display: block;
+    }
+    .case-title { font-size: 18px; font-weight: 700; color: var(--smoke); margin-bottom: 10px; }
+    .case-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.65; }
+    .case-tag {
+      display: inline-block; margin-top: 16px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+      text-transform: uppercase; color: var(--navy-light);
+      background: rgba(34,81,168,0.1);
+      border: 1px solid rgba(34,81,168,0.2);
+      padding: 3px 10px; border-radius: 100px;
+    }
+
+    /* ── METRICS ── */
+    .metrics {
+      padding: 80px 48px;
+      background: var(--charcoal);
+      border-top: 1px solid var(--border-soft);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .metrics-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1px; background: var(--border-soft);
+      border: 1px solid var(--border-soft);
+      border-radius: 16px; overflow: hidden;
+    }
+    .metric-item {
+      background: var(--charcoal);
+      padding: 40px 32px; text-align: center;
+    }
+    .metric-val {
+      font-family: var(--font-display);
+      font-size: 52px; letter-spacing: 1px;
+      color: var(--smoke); line-height: 1;
+      margin-bottom: 8px;
+    }
+    .metric-val span { color: var(--navy-light); }
+    .metric-label { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
+
+    /* ── PRICING ── */
+    .pricing {
+      padding: 100px 48px;
+    }
+    .pricing-inner { max-width: 1100px; margin: 0 auto; }
+    .pricing-header { text-align: center; margin-bottom: 64px; }
+    .pricing-header .section-label { justify-content: center; }
+    .pricing-header .section-body { margin: 16px auto 0; text-align: center; }
+
+    .plans-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+
+    .plan-card {
+      background: var(--charcoal);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px; padding: 36px;
+      display: flex; flex-direction: column;
+      transition: all 0.25s;
+    }
+    .plan-card:hover { border-color: var(--border); }
+
+    .plan-card.featured {
+      background: linear-gradient(160deg, rgba(34,81,168,0.18) 0%, var(--charcoal) 60%);
+      border-color: rgba(34,81,168,0.35);
+      box-shadow: 0 0 40px rgba(34,81,168,0.12);
+    }
+
+    .plan-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--navy-light);
+      background: rgba(34,81,168,0.15);
+      border: 1px solid rgba(34,81,168,0.3);
+      padding: 3px 10px; border-radius: 100px;
+      margin-bottom: 20px; align-self: flex-start;
+    }
+    .plan-name { font-size: 20px; font-weight: 700; color: var(--smoke); margin-bottom: 8px; }
+    .plan-desc { font-size: 14px; color: var(--text-secondary); margin-bottom: 28px; line-height: 1.6; }
+
+    .plan-price {
+      margin-bottom: 28px;
+    }
+    .plan-amount {
+      font-family: var(--font-display);
+      font-size: 48px; letter-spacing: 1px;
+      color: var(--smoke); line-height: 1;
+    }
+    .plan-amount sup { font-size: 24px; color: var(--gray2); }
+    .plan-period { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    .plan-divider { height: 1px; background: var(--border-soft); margin-bottom: 24px; }
+
+    .plan-features { list-style: none; flex: 1; }
+    .plan-features li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 14px; color: var(--text-secondary);
+      padding: 6px 0; line-height: 1.5;
+    }
+    .plan-features li svg { color: var(--navy-light); flex-shrink: 0; margin-top: 2px; }
+
+    .plan-cta {
+      display: block; text-align: center;
+      margin-top: 28px; padding: 12px;
+      border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+      text-decoration: none; font-family: var(--font-body);
+    }
+    .cta-outline {
+      background: none; color: var(--smoke);
+      border: 1px solid var(--border);
+    }
+    .cta-outline:hover { border-color: var(--navy-glow); }
+
+    .cta-filled {
+      background: var(--navy-bright); color: #fff; border: none;
+      box-shadow: 0 4px 20px rgba(34,81,168,0.3);
+    }
+    .cta-filled:hover {
+      background: var(--navy-glow);
+      box-shadow: 0 6px 28px rgba(34,81,168,0.45);
+    }
+
+    /* ── CTA BANNER ── */
+    .cta-banner {
+      padding: 80px 48px;
+    }
+    .cta-banner-inner {
+      max-width: 1200px; margin: 0 auto;
+      background: linear-gradient(135deg, var(--navy) 0%, #0d2550 50%, var(--navy-bright) 100%);
+      border-radius: 20px;
+      padding: 72px;
+      text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .cta-banner-inner::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+    }
+    .cta-banner-inner::after {
+      content: '';
+      position: absolute;
+      top: -60%; right: -10%;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 60%);
+    }
+    .cta-eyebrow {
+      font-size: 11px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: rgba(255,255,255,0.5);
+      margin-bottom: 16px;
+    }
+    .cta-title {
+      font-family: var(--font-display);
+      font-size: clamp(40px, 5vw, 68px);
+      letter-spacing: 2px; line-height: 1; color: #fff;
+      margin-bottom: 20px; position: relative; z-index: 1;
+    }
+    .cta-sub {
+      font-size: 17px; color: rgba(255,255,255,0.65);
+      max-width: 460px; margin: 0 auto 40px;
+      line-height: 1.7; position: relative; z-index: 1;
+    }
+    .cta-buttons {
+      display: flex; align-items: center; justify-content: center;
+      gap: 14px; position: relative; z-index: 1;
+    }
+    .btn-white {
+      background: #fff; color: var(--navy);
+      border: none; padding: 14px 32px;
+      border-radius: 8px; font-size: 15px; font-weight: 700;
+      cursor: pointer; font-family: var(--font-body);
+      text-decoration: none; transition: all 0.2s;
+    }
+    .btn-white:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    }
+    .btn-ghost-white {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff; padding: 14px 28px;
+      border-radius: 8px; font-size: 15px; font-weight: 500;
+      cursor: pointer; font-family: var(--font-body);
+      text-decoration: none; transition: all 0.2s;
+    }
+    .btn-ghost-white:hover { background: rgba(255,255,255,0.15); }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--charcoal);
+      border-top: 1px solid var(--border-soft);
+      padding: 60px 48px 32px;
+      position: relative; z-index: 1;
+    }
+    .footer-top {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px; margin-bottom: 48px;
+      max-width: 1200px; margin: 0 auto 48px;
+    }
+    .footer-brand {}
+    .footer-logo {
+      display: flex; align-items: center; gap: 9px;
+      text-decoration: none; margin-bottom: 14px;
+    }
+    .footer-logo-mark {
+      width: 28px; height: 28px; border-radius: 7px;
+      background: linear-gradient(135deg, var(--navy-glow), var(--navy-light));
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 14px; color: #fff;
+    }
+    .footer-logo-text {
+      font-family: var(--font-display);
+      font-size: 18px; letter-spacing: 2px; color: var(--smoke);
+    }
+    .footer-tagline { font-size: 14px; color: var(--text-muted); line-height: 1.6; max-width: 260px; }
+
+    .footer-col-title {
+      font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+    .footer-links { list-style: none; }
+    .footer-links li { margin-bottom: 10px; }
+    .footer-links a {
+      font-size: 14px; color: var(--text-secondary);
+      text-decoration: none; transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--smoke); }
+
+    .footer-bottom {
+      max-width: 1200px; margin: 0 auto;
+      padding-top: 24px; border-top: 1px solid var(--border-soft);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .footer-copy { font-size: 13px; color: var(--text-muted); }
+    .footer-legal { display: flex; gap: 24px; }
+    .footer-legal a { font-size: 13px; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+    .footer-legal a:hover { color: var(--text-secondary); }
+
+    /* ── SCROLL REVEAL ── */
+    .reveal {
+      opacity: 0; transform: translateY(32px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+    .reveal-delay-4 { transition-delay: 0.4s; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      nav { padding: 0 24px; }
+      .nav-links { display: none; }
+      .hero { padding: 100px 24px 60px; }
+      .features, .how, .usecases, .pricing, .cta-banner { padding: 72px 24px; }
+      .features-top { grid-template-columns: 1fr; gap: 32px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .how-inner { grid-template-columns: 1fr; gap: 48px; }
+      .cases-grid, .plans-grid { grid-template-columns: 1fr; }
+      .metrics-inner { grid-template-columns: repeat(2, 1fr); }
+      .footer-top { grid-template-columns: 1fr 1fr; }
+      .footer-bottom { flex-direction: column; gap: 16px; text-align: center; }
+      .cta-banner-inner { padding: 48px 28px; }
+      .logos-row { gap: 28px; }
+      .hero-badges { gap: 16px; flex-wrap: wrap; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a class="nav-logo" href="#">
+      <div class="nav-logo-mark">AF</div>
+      <span class="nav-logo-text">AGENTFLOW</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#usecases">Use Cases</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#">Docs</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a class="btn-ghost-nav" href="#">Sign in</a>
+      <a class="btn-primary-nav" href="#">Get started free</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-glow-1"></div>
+    <div class="hero-glow-2"></div>
+    <div class="hero-glow-3"></div>
+    <div class="hero-grid"></div>
+
+    <div class="hero-eyebrow">
+      <span class="eyebrow-dot"></span>
+      Now available — v2.4 with Audit Intelligence
+    </div>
+
+    <h1 class="hero-title">
+      EMBED AI<br>
+      <span class="title-blue">AGENTS</span> INTO<br>
+      YOUR <span class="title-accent">PORTAL</span>
+    </h1>
+
+    <p class="hero-sub">
+      Drop a single script tag and give your enterprise software an <em>intelligent assistant</em> that knows your workflows, your data, and your users.
+    </p>
+
+    <div class="hero-actions">
+      <a class="btn-primary" href="#">
+        Get started free
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+      <a class="btn-outline" href="#">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M6.5 5.5l4 2.5-4 2.5V5.5z" fill="currentColor"/>
+        </svg>
+        Watch demo
+      </a>
+    </div>
+
+    <div class="hero-badges">
+      <div class="hero-badge">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M7 1l1.6 3.3L12 5l-2.5 2.4.6 3.5L7 9.3l-3.1 1.6.6-3.5L2 5l3.4-.7L7 1z" fill="currentColor"/>
+        </svg>
+        No backend required
+      </div>
+      <div class="badge-sep"></div>
+      <div class="hero-badge">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="1.5" y="1.5" width="11" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M4.5 7l2 2 3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        1-line embed
+      </div>
+      <div class="badge-sep"></div>
+      <div class="hero-badge">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M7 4v3l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Full audit trail
+      </div>
+      <div class="badge-sep"></div>
+      <div class="hero-badge">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M2 7l3 3 7-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        HIPAA-ready
+      </div>
+    </div>
+
+    <!-- BROWSER MOCKUP -->
+    <div class="hero-mockup">
+      <div class="mockup-browser">
+        <div class="mockup-bar">
+          <div class="mockup-dots">
+            <div class="mockup-dot"></div>
+            <div class="mockup-dot"></div>
+            <div class="mockup-dot"></div>
+          </div>
+          <div class="mockup-url-bar">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M5 2v3l2 1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
+            portal.medicare-hmo.com/claims
+          </div>
+        </div>
+        <div class="mockup-body">
+          <div class="mock-sidebar">
+            <div class="mock-brand">
+              <div class="mock-brand-name">MediCare HMO</div>
+              <div class="mock-brand-sub">Staff Portal v2.4</div>
+            </div>
+            <div class="mock-nav-group">
+              <div class="mock-nav-label">Operations</div>
+              <div class="mock-nav-item"><div class="mock-nav-dot"></div> Pre-Authorization</div>
+              <div class="mock-nav-item active"><div class="mock-nav-dot"></div> Claims</div>
+              <div class="mock-nav-item"><div class="mock-nav-dot"></div> Members</div>
+              <div class="mock-nav-item"><div class="mock-nav-dot"></div> Providers</div>
+            </div>
+            <div class="mock-nav-group">
+              <div class="mock-nav-label">Reports</div>
+              <div class="mock-nav-item"><div class="mock-nav-dot"></div> Analytics</div>
+              <div class="mock-nav-item"><div class="mock-nav-dot"></div> Audit Log</div>
+            </div>
+          </div>
+          <div class="mock-main">
+            <div class="mock-topbar">
+              <div class="mock-page-title">Claims Management</div>
+              <div class="mock-badge-row">
+                <span class="mock-badge mock-badge-blue">14 Open</span>
+                <span class="mock-badge mock-badge-green">Live</span>
+              </div>
+            </div>
+            <div class="mock-stats">
+              <div class="mock-stat">
+                <div class="mock-stat-label">Open Claims</div>
+                <div class="mock-stat-val blue">14</div>
+              </div>
+              <div class="mock-stat">
+                <div class="mock-stat-label">Pending Auth</div>
+                <div class="mock-stat-val amber">7</div>
+              </div>
+              <div class="mock-stat">
+                <div class="mock-stat-label">Approved</div>
+                <div class="mock-stat-val green">38</div>
+              </div>
+              <div class="mock-stat">
+                <div class="mock-stat-label">Rejected</div>
+                <div class="mock-stat-val">3</div>
+              </div>
+            </div>
+            <div class="mock-table-header">
+              <span>Member</span><span>Type</span><span>Amount</span><span>Status</span>
+            </div>
+            <div class="mock-table-row">
+              <span>Chioma Eze</span><span>Inpatient</span><span>₦420k</span>
+              <span class="mock-status status-pending">Pending</span>
+            </div>
+            <div class="mock-table-row">
+              <span>Emeka Obi</span><span>Lab Tests</span><span>₦85k</span>
+              <span class="mock-status status-approved">Approved</span>
+            </div>
+            <div class="mock-table-row">
+              <span>Ngozi Adu</span><span>Surgery</span><span>₦1.2M</span>
+              <span class="mock-status status-review">In Review</span>
+            </div>
+
+            <!-- AI Widget -->
+            <div class="mock-widget">
+              <div class="mock-widget-head">
+                <div class="mock-widget-avatar">🤖</div>
+                <div>
+                  <div class="mock-widget-title">AgentFlow AI</div>
+                  <div class="mock-widget-sub">● Online</div>
+                </div>
+              </div>
+              <div class="mock-widget-body">
+                <div class="mock-msg msg-bot">Hi Adaeze! I see 7 claims need attention. Want me to flag the high-priority ones?</div>
+                <div class="mock-msg msg-user">Yes, show urgent claims</div>
+                <div class="mock-msg msg-bot">
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                </div>
+                <div class="mock-input-row">
+                  <div class="mock-input">Ask anything...</div>
+                  <div class="mock-send-btn">↑</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOGOS -->
+  <div class="logos-strip">
+    <div class="logos-label">Trusted by leading enterprises</div>
+    <div class="logos-row">
+      <div class="logo-item">RELIANCE HMO</div>
+      <div class="logo-item">HYGEIA</div>
+      <div class="logo-item">LEADWAY</div>
+      <div class="logo-item">ZUMA HEALTH</div>
+      <div class="logo-item">TOTAL HEALTH</div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <div class="features-top">
+      <div class="reveal">
+        <div class="section-label">Features</div>
+        <h2 class="section-title">BUILT FOR<br>REAL <span class="serif">workflows</span></h2>
+      </div>
+      <div class="reveal reveal-delay-1">
+        <p class="section-body" style="margin-top:0;">
+          AgentFlow doesn't just chat — it reads your portal context, understands your staff roles, and takes actions within your existing system.
+        </p>
+        <br>
+        <p class="section-body" style="margin-top:0; font-size:14px;">
+          Fully configurable via API key. Theme-matched to your brand. Logs every interaction.
+        </p>
+      </div>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="2" y="2" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M6 10l2.5 2.5L14 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="feature-title">Context-Aware Agent</div>
+        <div class="feature-desc">The widget reads the DOM of your portal — it knows which page the user is on, what records are visible, and who is logged in.</div>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M10 6v4l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="feature-title">Real-Time Audit Trail</div>
+        <div class="feature-desc">Every AI interaction is logged with timestamp, user identity, action taken, and the reasoning chain used to reach the answer.</div>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M4 4h12v8H4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M7 16h6M10 12v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="feature-title">Branded Themes</div>
+        <div class="feature-desc">Choose from built-in color themes or pass custom hex values. The widget adapts to your brand automatically with zero CSS work.</div>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M3 7h14M3 10h14M3 13h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="feature-title">Conversational Memory</div>
+        <div class="feature-desc">Maintains context across a session so staff can ask follow-ups naturally, just like talking to a knowledgeable colleague.</div>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2L3 6v8l7 4 7-4V6L10 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="feature-title">File & Document Support</div>
+        <div class="feature-desc">Staff can attach PDFs, images, and documents directly in chat. The agent extracts and reasons over the file content instantly.</div>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="feature-title">API-First Architecture</div>
+        <div class="feature-desc">Built on a clean REST backend. Configure system prompts, personas, and tool access via API key — no dashboard required.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how" id="how">
+    <div class="how-inner">
+      <div>
+        <div class="section-label reveal">How it works</div>
+        <h2 class="section-title reveal">DEPLOY IN<br><span class="serif">minutes</span></h2>
+        <div class="steps">
+          <div class="step reveal">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <div class="step-title">Get your API key</div>
+              <div class="step-desc">Sign up and receive a unique API key for your organization. Configure your agent's persona and knowledge base in the dashboard.</div>
+            </div>
+          </div>
+          <div class="step reveal reveal-delay-1">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <div class="step-title">Drop in one script tag</div>
+              <div class="step-desc">Add a single &lt;script&gt; tag to your portal. Pass your API key and preferred theme — AgentFlow handles the rest.</div>
+            </div>
+          </div>
+          <div class="step reveal reveal-delay-2">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <div class="step-title">Agent goes live instantly</div>
+              <div class="step-desc">A floating AI widget appears on your portal. It reads the page context, identifies the logged-in user, and starts assisting immediately.</div>
+            </div>
+          </div>
+          <div class="step reveal reveal-delay-3">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <div class="step-title">Monitor via audit dashboard</div>
+              <div class="step-desc">Every conversation, decision, and action is captured and viewable in your audit trail with timestamps and user attribution.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal reveal-delay-2">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-title">embed.html</span>
+            <span class="code-lang">HTML</span>
+          </div>
+          <div class="code-body">
+            <div><span class="c-comment">&lt;!-- Step 1: Add to your portal's &lt;/body&gt; --&gt;</span></div>
+            <div>&nbsp;</div>
+            <div>
+              <span class="c-tag">&lt;script</span>
+              <br>&nbsp;&nbsp;<span class="c-attr">src</span>=<span class="c-string">"https://cdn.agentflow.io/widget.js"</span>
+              <br>&nbsp;&nbsp;<span class="c-attr">data-api-key</span>=<span class="c-string">"af_live_yourkey123"</span>
+              <br>&nbsp;&nbsp;<span class="c-attr">data-theme</span>=<span class="c-string">"blue"</span>
+              <br>&nbsp;&nbsp;<span class="c-attr">defer</span>
+              <br><span class="c-tag">&gt;&lt;/script&gt;</span>
+            </div>
+            <div>&nbsp;</div>
+            <div><span class="c-comment">&lt;!-- That's it. The agent is now live. --&gt;</span></div>
+            <div>&nbsp;</div>
+            <div><span class="c-comment">// Optional: configure via JS</span></div>
+            <div><span class="c-key">window</span>.<span class="c-attr">AgentFlow</span>?.configure({</div>
+            <div>&nbsp;&nbsp;<span class="c-key">persona</span>: <span class="c-string">"Claims Assistant"</span>,</div>
+            <div>&nbsp;&nbsp;<span class="c-key">greeting</span>: <span class="c-string">"Hi! How can I help?"</span>,</div>
+            <div>&nbsp;&nbsp;<span class="c-key">theme</span>: { <span class="c-key">primary</span>: <span class="c-string">"#1a3a6b"</span> }</div>
+            <div>});</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- USE CASES -->
+  <section class="usecases" id="usecases">
+    <div class="usecases-inner">
+      <div class="usecases-header">
+        <div class="section-label reveal">Use Cases</div>
+        <h2 class="section-title reveal">WORKS ACROSS<br><span class="serif">industries</span></h2>
+        <p class="section-body reveal">Any portal with complex workflows and staff who need to move fast is a perfect fit for AgentFlow.</p>
+      </div>
+
+      <div class="cases-grid">
+        <div class="case-card reveal">
+          <span class="case-icon">🏥</span>
+          <div class="case-title">HMO & Health Insurance</div>
+          <div class="case-desc">Automate claims review, pre-authorization checks, member eligibility lookups, and provider queries — all inside your existing staff portal.</div>
+          <span class="case-tag">Healthcare</span>
+        </div>
+        <div class="case-card reveal reveal-delay-1">
+          <span class="case-icon">⚖️</span>
+          <div class="case-title">Legal & Compliance</div>
+          <div class="case-desc">Let legal staff ask natural language questions about case histories, policy documents, and regulatory filings without leaving their portal.</div>
+          <span class="case-tag">Legal</span>
+        </div>
+        <div class="case-card reveal reveal-delay-2">
+          <span class="case-icon">🏦</span>
+          <div class="case-title">Financial Services</div>
+          <div class="case-desc">Enable loan officers, underwriters, and support staff to query customer data, flag anomalies, and generate summaries with a single question.</div>
+          <span class="case-tag">Finance</span>
+        </div>
+        <div class="case-card reveal">
+          <span class="case-icon">🛒</span>
+          <div class="case-title">E-Commerce Operations</div>
+          <div class="case-desc">Help operations teams resolve order disputes, check inventory, and handle escalations faster with an AI co-pilot embedded in their ops dashboard.</div>
+          <span class="case-tag">Operations</span>
+        </div>
+        <div class="case-card reveal reveal-delay-1">
+          <span class="case-icon">🏢</span>
+          <div class="case-title">HR & People Ops</div>
+          <div class="case-desc">From onboarding queries to policy lookups and payroll summaries — give HR teams an intelligent agent that knows your company's systems.</div>
+          <span class="case-tag">HR</span>
+        </div>
+        <div class="case-card reveal reveal-delay-2">
+          <span class="case-icon">🔧</span>
+          <div class="case-title">IT Service Desks</div>
+          <div class="case-desc">Resolve tickets faster by embedding an AI agent that can query your ITSM system, suggest fixes, and escalate with full context preserved.</div>
+          <span class="case-tag">IT</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- METRICS -->
+  <section class="metrics">
+    <div class="metrics-inner">
+      <div class="metric-item reveal">
+        <div class="metric-val">4<span>×</span></div>
+        <div class="metric-label">Faster claim resolution</div>
+      </div>
+      <div class="metric-item reveal reveal-delay-1">
+        <div class="metric-val">98<span>%</span></div>
+        <div class="metric-label">Audit coverage rate</div>
+      </div>
+      <div class="metric-item reveal reveal-delay-2">
+        <div class="metric-val">&lt;1<span>min</span></div>
+        <div class="metric-label">Integration time</div>
+      </div>
+      <div class="metric-item reveal reveal-delay-3">
+        <div class="metric-val">60<span>+</span></div>
+        <div class="metric-label">Enterprise clients</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="pricing" id="pricing">
+    <div class="pricing-inner">
+      <div class="pricing-header">
+        <div class="section-label reveal">Pricing</div>
+        <h2 class="section-title reveal">SIMPLE,<br><span class="serif">transparent</span></h2>
+        <p class="section-body reveal">No hidden fees. No per-seat pricing surprises. Scale with confidence.</p>
+      </div>
+
+      <div class="plans-grid">
+        <div class="plan-card reveal">
+          <span class="plan-badge">Starter</span>
+          <div class="plan-name">Basic</div>
+          <div class="plan-desc">Perfect for small teams testing AI-assisted workflows.</div>
+          <div class="plan-price">
+            <div class="plan-amount"><sup>$</sup>0</div>
+            <div class="plan-period">Free forever</div>
+          </div>
+          <div class="plan-divider"></div>
+          <ul class="plan-features">
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              1 portal integration
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              100 conversations/month
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Basic audit log
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              2 themes
+            </li>
+          </ul>
+          <a class="plan-cta cta-outline" href="#">Get started</a>
+        </div>
+
+        <div class="plan-card featured reveal reveal-delay-1">
+          <span class="plan-badge">Most Popular</span>
+          <div class="plan-name">Professional</div>
+          <div class="plan-desc">For growing teams that need full audit capabilities and multi-portal support.</div>
+          <div class="plan-price">
+            <div class="plan-amount"><sup>$</sup>149</div>
+            <div class="plan-period">per month, billed annually</div>
+          </div>
+          <div class="plan-divider"></div>
+          <ul class="plan-features">
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Up to 5 portal integrations
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Unlimited conversations
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Full audit trail + export
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Custom themes & branding
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              File & document support
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Priority support
+            </li>
+          </ul>
+          <a class="plan-cta cta-filled" href="#">Start free trial</a>
+        </div>
+
+        <div class="plan-card reveal reveal-delay-2">
+          <span class="plan-badge">Enterprise</span>
+          <div class="plan-name">Scale</div>
+          <div class="plan-desc">Tailored deployment for large organizations with compliance requirements.</div>
+          <div class="plan-price">
+            <div class="plan-amount" style="font-size:36px; padding-top:8px;">Custom</div>
+            <div class="plan-period">contact us for pricing</div>
+          </div>
+          <div class="plan-divider"></div>
+          <ul class="plan-features">
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Unlimited portals
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              On-premise deployment option
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              HIPAA / SOC2 compliance
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Custom AI persona training
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Dedicated success manager
+            </li>
+            <li>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              SLA guarantees
+            </li>
+          </ul>
+          <a class="plan-cta cta-outline" href="#">Contact sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA BANNER -->
+  <section class="cta-banner">
+    <div class="cta-banner-inner">
+      <div class="cta-eyebrow">Ready to deploy?</div>
+      <h2 class="cta-title">YOUR PORTAL<br>DESERVES A<br>BRAIN</h2>
+      <p class="cta-sub">Join enterprise teams using AgentFlow to move faster, make fewer errors, and build a complete audit record automatically.</p>
+      <div class="cta-buttons">
+        <a class="btn-white" href="#">Start for free</a>
+        <a class="btn-ghost-white" href="#">Book a demo →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="footer-logo" href="#">
+          <div class="footer-logo-mark">AF</div>
+          <span class="footer-logo-text">AGENTFLOW</span>
+        </a>
+        <p class="footer-tagline">Embed AI agents into any enterprise portal. One script. Infinite intelligence.</p>
+      </div>
+      <div>
+        <div class="footer-col-title">Product</div>
+        <ul class="footer-links">
+          <li><a href="#">Features</a></li>
+          <li><a href="#">Pricing</a></li>
+          <li><a href="#">Changelog</a></li>
+          <li><a href="#">Roadmap</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Developers</div>
+        <ul class="footer-links">
+          <li><a href="#">Documentation</a></li>
+          <li><a href="#">API Reference</a></li>
+          <li><a href="#">Widget Guide</a></li>
+          <li><a href="#">GitHub</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">Company</div>
+        <ul class="footer-links">
+          <li><a href="#">About</a></li>
+          <li><a href="#">Blog</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="#">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">© 2025 AgentFlow. All rights reserved.</div>
+      <div class="footer-legal">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Security</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Scroll reveal
+    const reveals = document.querySelectorAll('.reveal');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    reveals.forEach(el => observer.observe(el));
+
+    // Animate typing dots cycling
+    let msgIdx = 0;
+    const botMsg = document.querySelector('.mock-widget .msg-bot:last-of-type');
+    const replies = [
+      '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>',
+      'Found 3 urgent: Chioma Eze (₦420k), Ngozi Adu (₦1.2M)…',
+      '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>'
+    ];
+    let phase = 0;
+    setInterval(() => {
+      if(botMsg) {
+        phase = (phase + 1) % replies.length;
+        botMsg.innerHTML = replies[phase];
+      }
+    }, 1800);
+  </script>
+</body>
+</html>
