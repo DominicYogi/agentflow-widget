@@ -307,8 +307,6 @@
 
     .stat-card:nth-child(1) { animation-delay: 0.05s; }
     .stat-card:nth-child(2) { animation-delay: 0.1s; }
-    .stat-card:nth-child(3) { animation-delay: 0.15s; }
-    .stat-card:nth-child(4) { animation-delay: 0.2s; }
 
     .stat-card::before {
       content: '';
@@ -338,7 +336,7 @@
       margin-bottom: 8px;
     }
 
-    .stat-value.green { color: var(--accent); }
+    .stat-value.green  { color: var(--accent); }
     .stat-value.purple { color: var(--accent2); }
     .stat-value.orange { color: var(--warning); }
 
@@ -368,14 +366,15 @@
       letter-spacing: 0.05em;
     }
 
-    .plan-pills {
+    /* client info pills — no payment info */
+    .info-pills {
       display: flex;
       gap: 8px;
       margin-top: 16px;
       flex-wrap: wrap;
     }
 
-    .plan-pill {
+    .info-pill {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -386,9 +385,9 @@
       font-size: 13px;
     }
 
-    .plan-pill .icon { font-size: 16px; }
-    .plan-pill .pill-label { color: var(--muted); }
-    .plan-pill .pill-val { font-weight: 600; margin-left: 4px; }
+    .info-pill .icon { font-size: 16px; }
+    .info-pill .pill-label { color: var(--muted); }
+    .info-pill .pill-val { font-weight: 600; margin-left: 4px; }
 
     .embed-section {
       background: var(--card);
@@ -510,6 +509,7 @@
       transition: all 0.2s;
     }
     .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .refresh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .audit-entry {
       display: flex;
@@ -668,6 +668,95 @@
 
     .audit-empty { text-align: center; padding: 48px; color: var(--muted); font-size: 14px; }
 
+    /* API Key modal */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      animation: fadeIn 0.15s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+    }
+    .modal-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 18px;
+      margin-bottom: 16px;
+    }
+    .modal-key {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: var(--accent);
+      word-break: break-all;
+      line-height: 1.7;
+      margin-bottom: 16px;
+      user-select: all;
+    }
+    .modal-warning {
+      font-size: 12px;
+      color: var(--warning);
+      margin-bottom: 20px;
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .modal-btn {
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .modal-btn-primary {
+      background: var(--accent);
+      color: #0a0a0f;
+      border: none;
+    }
+    .modal-btn-primary:hover { opacity: 0.85; }
+    .modal-btn-secondary {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .modal-btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+
+    /* Live indicator */
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--accent);
+      margin-left: 8px;
+    }
+    .live-dot {
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
     @media (max-width: 800px) {
       .ad-grid-3, .ad-grid-2 { grid-template-columns: 1fr; }
       .ad-section { border-right: none; border-bottom: 1px solid var(--border); }
@@ -696,6 +785,21 @@
   </div>
 </div>
 
+<!-- API KEY MODAL -->
+<div id="api-key-modal" style="display:none;">
+  <div class="modal-overlay" onclick="closeApiModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-title">🔑 Your API Key</div>
+      <div class="modal-key" id="modal-key-display">—</div>
+      <div class="modal-warning">⚠️ Keep this private. Do not share it publicly or commit it to source control.</div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-secondary" onclick="closeApiModal()">Close</button>
+        <button class="modal-btn modal-btn-primary" id="modal-copy-btn" onclick="copyApiKey()">📋 Copy key</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- DASHBOARD -->
 <div id="dashboard">
 
@@ -709,7 +813,6 @@
         <div class="status-dot"></div>
         <span id="topbar-client-name">Loading...</span>
       </div>
-      <!-- FIX 1: was calling doLogout() but function was named logout() -->
       <button class="logout-btn" onclick="doLogout()">Sign out</button>
     </div>
   </nav>
@@ -718,21 +821,25 @@
 
     <div class="page-header">
       <h1>Your <span id="header-client-name">Dashboard</span></h1>
-      <p id="header-plan-info">Loading your subscription details...</p>
+      <p id="header-client-info">Loading your account details...</p>
     </div>
 
+    <!-- Stats: Status + Industry (no plan/payment) -->
     <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Plan</div>
-        <div class="stat-value purple" id="stat-plan">—</div>
-      </div>
       <div class="stat-card">
         <div class="stat-label">Status</div>
         <div class="stat-value green" id="stat-status">—</div>
-        <div class="stat-sub" id="stat-industry">—</div>
+        <div class="stat-sub" id="stat-status-sub">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Industry</div>
+        <div class="stat-value purple" id="stat-industry">—</div>
+        <div class="stat-sub" id="stat-industry-sub">Active account</div>
       </div>
     </div>
 
+    <!-- Client info pills (no payment info) -->
+    <div id="info-pills" class="info-pills" style="margin-bottom:32px;"></div>
 
     <div class="embed-section">
       <div class="section-title">Your Embed Code</div>
@@ -744,10 +851,10 @@
     </div>
 
     <div class="quick-grid">
-      <div class="quick-card" onclick="window.open('https://dominicyogi.github.io/agentflow-widget/', '_blank')">
+      <div class="quick-card" id="test-widget-card" onclick="window.open(BACKEND_URL.replace('/api','') + '/test', '_blank')">
         <div class="quick-icon">🚀</div>
         <div class="quick-title">Test Widget</div>
-        <div class="quick-desc">Open the demo dashboard and see your agent in action</div>
+        <div class="quick-desc">Open the live test environment and see your agent in action</div>
       </div>
       <div class="quick-card" onclick="showApiKey()">
         <div class="quick-icon">🔑</div>
@@ -763,9 +870,10 @@
 
     <div class="audit-section" id="audit-section">
       <div class="section-title">
-        Audit Log
+        Recent Activity
         <span class="badge" id="audit-count-badge">Loading...</span>
-        <button class="refresh-btn" onclick="loadAuditLog()">↻ Refresh</button>
+        <span class="live-indicator"><span class="live-dot"></span>live</span>
+        <button class="refresh-btn" id="refresh-btn" onclick="loadAuditLog()">↻ Refresh</button>
       </div>
       <p class="embed-description">Every action your AI agent has executed — who triggered it, what it did, and when.</p>
       <div id="audit-log-list">
@@ -778,12 +886,16 @@
 
 <script>
   const BACKEND_URL = "https://agentflow-backend-hqqc.onrender.com";
-  let currentApiKey = "";
-  let clientData = null;
+  let currentApiKey  = "";
+  let clientData     = null;
+  let autoRefreshTimer = null;
 
   // ── Login ─────────────────────────────────────────────
   document.getElementById("password-input").addEventListener("keydown", e => {
     if (e.key === "Enter") doLogin();
+  });
+  document.getElementById("email-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") document.getElementById("password-input").focus();
   });
 
   async function doLogin() {
@@ -791,18 +903,18 @@
     const password = (document.getElementById("password-input").value || "").trim();
     if (!email || !password) return;
 
-    const btn = document.getElementById("login-btn");
+    const btn  = document.getElementById("login-btn");
     const errEl = document.getElementById("login-error");
     btn.disabled = true;
     btn.textContent = "Signing in...";
     errEl.style.display = "none";
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/client/login`, {
+      const res = await fetchWithTimeout(`${BACKEND_URL}/api/client/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
-      });
+      }, 15000);
 
       const data = await res.json();
       if (!data.success) throw new Error(data.error || "Login failed");
@@ -811,34 +923,29 @@
       clientData    = data.client;
       sessionStorage.setItem("af_client_session", JSON.stringify(data.client));
 
-      // FIX 2: Re-fetch fresh stats from /api/agent/status after login
-      // so usage numbers are always up-to-date (not stale from login payload)
       await refreshClientStats(data.client);
 
     } catch (err) {
-      errEl.textContent   = err.message || "Invalid email or password.";
+      const msg = err.name === "AbortError"
+        ? "Connection timed out. Please try again."
+        : (err.message || "Invalid email or password.");
+      errEl.textContent   = msg;
       errEl.style.display = "block";
       btn.disabled = false;
       btn.textContent = "Sign in →";
     }
   }
 
-  // FIX 3: Added refreshClientStats() — fetches live data from /status endpoint
   async function refreshClientStats(baseClient) {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/agent/status`, {
-        headers: {
-          "x-api-key": currentApiKey,
-          "ngrok-skip-browser-warning": "true"
-        }
-      });
+      const res = await fetchWithTimeout(`${BACKEND_URL}/api/agent/status`, {
+        headers: { "x-api-key": currentApiKey }
+      }, 10000);
       const data = await res.json();
       if (data.success && data.client) {
-        // Merge fresh stats into the base client object
         const merged = {
           ...baseClient,
           status:   data.client.status,
-          plan:     data.client.plan,
           industry: data.client.industry,
           name:     data.client.name
         };
@@ -862,48 +969,45 @@
     // Header
     document.getElementById("topbar-client-name").textContent = client.name || "—";
     document.getElementById("header-client-name").textContent = client.name || "Dashboard";
-    document.getElementById("header-plan-info").textContent =
-      `${client.plan || "—"} Plan · ${client.industry || "—"} · ${client.status === "active" ? "Active subscription" : client.status === "trial" ? "Trial" : "Inactive"}`;
+    document.getElementById("header-client-info").textContent =
+      `${client.industry || "—"} · ${client.status === "active" ? "Active account" : client.status === "trial" ? "Trial account" : "Account inactive"}`;
 
-    // Stats
-    document.getElementById("stat-plan").textContent = client.plan || "—";
-
+    // Stats — no payment info
     const statusText  = client.status === "active" ? "Active" : client.status === "trial" ? "Trial" : "Inactive";
     const statusColor = client.status === "active" ? "green" : client.status === "trial" ? "orange" : "";
     const statusEl    = document.getElementById("stat-status");
     statusEl.textContent = statusText;
     statusEl.className   = `stat-value ${statusColor}`;
-    document.getElementById("stat-industry").textContent = client.industry || "—";
+    document.getElementById("stat-status-sub").textContent = client.name || "—";
 
-    // Plan pills
-    const planInfo = {
-      Starter:    { price: "₦250,000/mo", icon: "⚡" },
-      Growth:     { price: "₦600,000/mo", icon: "🚀" },
-      Enterprise: { price: "₦1,500,000/mo", icon: "🏢" },
-    };
-    const info = planInfo[client.plan] || { price: "Custom", icon: "✨" };
-    document.getElementById("plan-pills").innerHTML = `
-      <div class="plan-pill"><span class="icon">${info.icon}</span><span class="pill-label">Plan:</span><span class="pill-val">${client.plan || "—"}</span></div>
-      <div class="plan-pill"><span class="icon">💳</span><span class="pill-label">Price:</span><span class="pill-val">${info.price}</span></div>
-      <div class="plan-pill"><span class="icon">🏭</span><span class="pill-label">Industry:</span><span class="pill-val">${client.industry || "—"}</span></div>
-    `;
+    document.getElementById("stat-industry").textContent = client.industry || "—";
+    document.getElementById("stat-industry-sub").textContent = "Active account";
+
+    // Info pills — industry + name only, no payment
+    document.getElementById("info-pills").innerHTML = [
+      client.name     && `<div class="info-pill"><span class="icon">🏢</span><span class="pill-label">Account:</span><span class="pill-val">${escapeHtml(client.name)}</span></div>`,
+      client.industry && `<div class="info-pill"><span class="icon">🏭</span><span class="pill-label">Industry:</span><span class="pill-val">${escapeHtml(client.industry)}</span></div>`,
+      `<div class="info-pill"><span class="icon">⚡</span><span class="pill-label">Status:</span><span class="pill-val">${escapeHtml(statusText)}</span></div>`,
+    ].filter(Boolean).join("");
 
     renderEmbedCode(currentApiKey, client);
     loadAuditLog();
+    startAutoRefresh();
   }
 
   function renderEmbedCode(apiKey, client) {
-    const theme = client.industry === "HMO" ? "blue"
+    const theme = client.industry === "HMO"  ? "blue"
       : client.industry === "Bank" ? "dark"
       : "green";
-    const raw = `<script\n  src="https://dominicyogi.github.io/agentflow-widget/widget.min.js"\n  data-api-key="${apiKey}"\n  data-theme="${theme}">\n<\/script>`;
+    const raw = `<script\n  src="${BACKEND_URL.replace('/api','')}/widget.js"\n  data-api-key="${apiKey}"\n  data-theme="${theme}">\n<\/script>`;
     document.getElementById("embed-code-block").innerHTML =
-      `<span class="tag">&lt;script</span>\n  <span class="attr">src</span>=<span class="val">"https://dominicyogi.github.io/agentflow-widget/widget.js"</span>\n  <span class="attr">data-api-key</span>=<span class="val">"${apiKey}"</span>\n  <span class="attr">data-theme</span>=<span class="val">"${theme}"</span><span class="tag">&gt;\n&lt;/script&gt;</span>`;
+      `<span class="tag">&lt;script</span>\n  <span class="attr">src</span>=<span class="val">"${escapeHtml(BACKEND_URL.replace('/api',''))}/widget.js"</span>\n  <span class="attr">data-api-key</span>=<span class="val">"${escapeHtml(apiKey)}"</span>\n  <span class="attr">data-theme</span>=<span class="val">"${escapeHtml(theme)}"</span><span class="tag">&gt;\n&lt;/script&gt;</span>`;
     document.getElementById("embed-code-block").dataset.raw = raw;
   }
 
   function copyEmbed() {
     const raw = document.getElementById("embed-code-block").dataset.raw;
+    if (!raw) return;
     navigator.clipboard.writeText(raw).then(() => {
       const btn = document.getElementById("copy-btn");
       btn.textContent = "✅ Copied!";
@@ -912,24 +1016,45 @@
         btn.textContent = "📋 Copy embed code";
         btn.classList.remove("copied");
       }, 2000);
+    }).catch(() => {
+      prompt("Copy your embed code:", raw);
     });
   }
 
   function showApiKey() {
-    alert(`Your API Key:\n\n${currentApiKey}\n\nKeep this private.`);
+    document.getElementById("modal-key-display").textContent = currentApiKey;
+    document.getElementById("api-key-modal").style.display = "block";
   }
 
-  function scrollToLog() {
-    document.getElementById("audit-section").scrollIntoView({ behavior: "smooth" });
+  function closeApiModal(e) {
+    if (!e || e.target === document.querySelector(".modal-overlay")) {
+      document.getElementById("api-key-modal").style.display = "none";
+      const btn = document.getElementById("modal-copy-btn");
+      btn.textContent = "📋 Copy key";
+    }
   }
 
+  function copyApiKey() {
+    navigator.clipboard.writeText(currentApiKey).then(() => {
+      const btn = document.getElementById("modal-copy-btn");
+      btn.textContent = "✅ Copied!";
+      setTimeout(() => { btn.textContent = "📋 Copy key"; }, 2000);
+    }).catch(() => {
+      prompt("Copy your API key:", currentApiKey);
+    });
+  }
+
+  // ── Audit Log ─────────────────────────────────────────
   async function loadAuditLog() {
     const list = document.getElementById("audit-log-list");
-    list.innerHTML = `<div class="audit-empty">⏳ Loading...</div>`;
+    const refreshBtn = document.getElementById("refresh-btn");
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "↻ Loading…";
+
     try {
-      const res = await fetch(`${BACKEND_URL}/api/agent/logs?limit=200`, {
-        headers: { "x-api-key": currentApiKey, "ngrok-skip-browser-warning": "true" }
-      });
+      const res = await fetchWithTimeout(`${BACKEND_URL}/api/agent/logs?limit=200`, {
+        headers: { "x-api-key": currentApiKey }
+      }, 15000);
       const data = await res.json();
 
       if (!data.success || !data.logs || data.logs.length === 0) {
@@ -938,7 +1063,7 @@
         return;
       }
 
-      document.getElementById("audit-count-badge").textContent = `${data.total} entries`;
+      document.getElementById("audit-count-badge").textContent = `${data.total || data.logs.length} entries`;
       list.innerHTML = data.logs.map((log, i) => buildAuditEntry(log, i)).join("");
 
       list.querySelectorAll(".audit-entry-header").forEach(hdr => {
@@ -948,10 +1073,40 @@
       });
 
     } catch (err) {
-      list.innerHTML = `<div class="audit-empty">⚠️ Could not load audit log. Make sure the backend is running.</div>`;
+      const msg = err.name === "AbortError"
+        ? "⏱ Request timed out. Backend may be starting up — try again in a moment."
+        : "⚠️ Could not load audit log. Make sure the backend is running.";
+      list.innerHTML = `<div class="audit-empty">${msg}</div>`;
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = "↻ Refresh";
     }
   }
 
+  // Auto-refresh every 30 seconds while dashboard is open
+  function startAutoRefresh() {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    autoRefreshTimer = setInterval(() => {
+      if (currentApiKey) loadAuditLog();
+    }, 30000);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+  }
+
+  // ── Fetch with timeout ────────────────────────────────
+  function fetchWithTimeout(url, options = {}, ms = 12000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), ms);
+    return fetch(url, { ...options, signal: controller.signal })
+      .finally(() => clearTimeout(id));
+  }
+
+  // ── Audit entry builder ───────────────────────────────
   function buildAuditEntry(log, i) {
     const d  = log.device     || {};
     const op = log.operator   || {};
@@ -1004,8 +1159,8 @@
           <div class="audit-meta">
             <span class="audit-tag ${statusClass}">${statusLabel}</span>
             <span class="audit-time">🕐 ${timeAgo}</span>
-            ${op.name      ? `<span class="audit-page">👤 ${escapeHtml(op.name)}</span>` : ""}
-            ${d.ip         ? `<span class="audit-page">📡 ${escapeHtml(d.ip)}</span>` : ""}
+            ${op.name       ? `<span class="audit-page">👤 ${escapeHtml(op.name)}</span>` : ""}
+            ${d.ip          ? `<span class="audit-page">📡 ${escapeHtml(d.ip)}</span>` : ""}
             ${log.pageTitle ? `<span class="audit-page">📄 ${escapeHtml(log.pageTitle)}</span>` : ""}
             ${details.length ? `<span class="audit-page">⚡ ${details.length} step${details.length !== 1 ? "s" : ""}</span>` : ""}
           </div>
@@ -1085,16 +1240,19 @@
     return String(str)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
-  // FIX 1: Renamed from logout() → doLogout() to match the onclick="doLogout()" call
+  // ── Auth ──────────────────────────────────────────────
   function doLogout() {
+    stopAutoRefresh();
     currentApiKey = "";
     clientData = null;
     sessionStorage.removeItem("af_client_session");
-    document.getElementById("login-screen").style.display = "flex";
-    document.getElementById("dashboard").style.display   = "none";
+    document.getElementById("login-screen").style.display  = "flex";
+    document.getElementById("dashboard").style.display     = "none";
+    document.getElementById("api-key-modal").style.display = "none";
     document.getElementById("email-input").value    = "";
     document.getElementById("password-input").value = "";
     document.getElementById("login-btn").disabled   = false;
@@ -1108,13 +1266,23 @@
     if (cached) {
       try {
         const client = JSON.parse(cached);
+        if (!client.apiKey) throw new Error("No API key in session");
         currentApiKey = client.apiKey;
         clientData    = client;
-        // FIX 6: On restore, also refresh live stats so usage is never stale
         refreshClientStats(client);
       } catch {
         sessionStorage.removeItem("af_client_session");
       }
+    }
+  });
+
+  // Stop auto-refresh when tab is hidden, resume when visible
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopAutoRefresh();
+    } else if (currentApiKey) {
+      loadAuditLog();
+      startAutoRefresh();
     }
   });
 </script>
