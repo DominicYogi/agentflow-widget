@@ -552,7 +552,7 @@
   </div>
 
 <script>
-  const BACKEND_URL = "https://agentflow-backend-krdb.onrender.com";
+  const BACKEND_URL = "https://agentflow-backend-hqqc.onrender.com";
   const PAGE_SIZE   = 25;
 
   let allLogs     = [];
@@ -589,7 +589,7 @@
 
     try {
       const res  = await fetch(`${BACKEND_URL}/api/agent/logs?limit=500`, {
-        headers: { "x-api-key": apiKey, "ngrok-skip-browser-warning": "true" }
+        headers: { "x-api-key": apiKey }
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
