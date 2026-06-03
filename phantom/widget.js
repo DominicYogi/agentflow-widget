@@ -30,21 +30,31 @@
   let attachments         = [];   // [{ name, type, size, dataUrl, text }]
   const SESSION_KEY       = "af_conv_" + (API_KEY || "default");
 
-  // ── Session stats — tracked per widget session ────────────────────────
-  // Populated from the `usage` field returned by the backend /message endpoint.
-  // Accessible via the /usage command.
-  let sessionStats = {
-    messages:     0,
-    inputTokens:  0,
-    outputTokens: 0
-  };
+  // ── Bot active state — set from /api/agent/status poll ───────────────────
+  // true  = bot is live, input enabled
+  // false = admin turned bot off, input blocked, offline banner shown
+  let botActive = true;
 
-  function fmtTok(n) {
-    if (!n || n === 0) return "0";
-    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-    if (n >= 1_000)     return (n / 1_000).toFixed(1) + "k";
-    return String(n);
+  // ── Authenticated user state ──────────────────────────
+  // Set after login; used to send Bearer token in all API requests
+  let widgetToken = null;
+  let widgetUser  = null;
+  let widgetOrg   = null;
+
+  // ── Auth headers helper ───────────────────────────────
+  // When logged in via JWT, sends Bearer token.
+  // Falls back to x-api-key for backward compat (direct embed without login).
+  function authHeaders(extra) {
+    const h = { "ngrok-skip-browser-warning": "true", ...(extra || {}) };
+    if (widgetToken) {
+      h["Authorization"] = "Bearer " + widgetToken;
+    } else {
+      h["x-api-key"] = API_KEY;
+    }
+    return h;
   }
+
+
 
   // ── Network / connection state ────────────────────────
   // 'ok' | 'slow' | 'offline'
@@ -130,10 +140,32 @@
       display: flex; align-items: center; justify-content: center;
       cursor: pointer;
       box-shadow: 0 4px 24px ${theme.primary}55;
-      z-index: 9999; transition: transform 0.2s, box-shadow 0.2s;
-      font-size: 26px; border: none;
+      z-index: 9999; border: none;
+      /* No transition here — children handle their own */
     }
-    #af-launcher:hover { transform: scale(1.08); box-shadow: 0 6px 28px ${theme.primary}77; }
+    #af-launcher:hover { box-shadow: 0 6px 28px ${theme.primary}77; }
+
+    /* The launcher holds two icon layers that cross-fade */
+    #af-launcher .af-icon-logo,
+    #af-launcher .af-icon-close {
+      position: absolute;
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px;
+      transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+      pointer-events: none;
+    }
+
+    /* Default state: logo visible, X hidden+rotated */
+    #af-launcher .af-icon-logo  { opacity: 1; transform: rotate(0deg) scale(1); }
+    #af-launcher .af-icon-close { opacity: 0; transform: rotate(-90deg) scale(0.6); }
+
+    /* Open state: logo hidden+rotated, X visible */
+    #af-launcher.open .af-icon-logo  { opacity: 0; transform: rotate(90deg) scale(0.6); }
+    #af-launcher.open .af-icon-close { opacity: 1; transform: rotate(0deg) scale(1); }
+
+    /* Subtle scale pulse on the button itself */
+    #af-launcher { transition: box-shadow 0.2s, transform 0.2s; }
+    #af-launcher:hover { transform: scale(1.08); }
 
     #af-panel {
       position: fixed; bottom: 106px; right: 30px; top: 16px;
@@ -175,11 +207,135 @@
     .af-dot          { width: 7px; height: 7px; border-radius: 50%; background: #00FF88; animation: af-pulse 2s infinite; }
     .af-dot.slow     { background: #FFB300; }
     .af-dot.offline  { background: #f44336; animation: none; }
+    .af-dot.bot-offline { background: #f44336; animation: none; }
     @keyframes af-pulse { 0%,100%{opacity:1}50%{opacity:0.35} }
-    #af-close { cursor:pointer; font-size:18px; opacity:0.75; }
-    #af-close:hover { opacity:1; }
+    /* ── Bot-offline overlay ── */
+    #af-bot-offline-banner {
+      display: none; align-items: center; gap: 8px;
+      padding: 8px 14px; font-size: 12px; font-weight: 600;
+      background: #fdecea; color: #b71c1c;
+      border-bottom: 1px solid #ffcdd2; flex-shrink: 0;
+    }
+    #af-bot-offline-banner.visible { display: flex; }
 
-    #af-messages {
+    /* ══ Auth screen ══════════════════════════════════════
+       Shown before the chat. Covers the full panel.
+       States: login | signup | forgot
+    ══════════════════════════════════════════════════════ */
+    #af-auth-screen {
+      display: flex; flex-direction: column;
+      position: absolute; inset: 0; z-index: 30;
+      background: #f7f8fa; border-radius: 16px; overflow-y: auto;
+    }
+    #af-auth-screen.hidden { display: none; }
+
+    .af-auth-header {
+      background: ${theme.primary}; color: white;
+      padding: 18px 20px 16px; flex-shrink: 0;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .af-auth-logo {
+      width: 32px; height: 32px; border-radius: 50%;
+      object-fit: contain; background: rgba(255,255,255,0.15);
+    }
+    .af-auth-header-text { flex: 1; }
+    .af-auth-header-title { font-size: 14px; font-weight: 700; }
+    .af-auth-header-sub   { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+
+    .af-auth-body {
+      flex: 1; padding: 24px 20px 20px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .af-auth-title {
+      font-size: 18px; font-weight: 800; color: #111; margin: 0 0 2px;
+    }
+    .af-auth-subtitle { font-size: 12px; color: #888; margin: 0 0 4px; }
+
+    .af-auth-field { display: flex; flex-direction: column; gap: 5px; }
+    .af-auth-field label {
+      font-size: 11px; font-weight: 700; color: #555;
+      display: flex; align-items: center; gap: 5px; letter-spacing: 0.3px;
+    }
+    .af-auth-field label svg { opacity: 0.6; }
+    .af-auth-field input {
+      padding: 9px 12px; border: 1.5px solid #e0e0e0; border-radius: 8px;
+      font-size: 13px; outline: none; background: white; color: #111;
+      transition: border-color 0.2s;
+    }
+    .af-auth-field input:focus { border-color: ${theme.primary}; }
+    .af-auth-field input.error { border-color: #e53935; }
+
+    .af-auth-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .af-auth-btn {
+      padding: 11px; background: ${theme.primary}; color: white;
+      border: none; border-radius: 9px; font-size: 13px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      gap: 7px; transition: background 0.2s; margin-top: 4px;
+    }
+    .af-auth-btn:hover  { background: ${theme.accent}; }
+    .af-auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .af-auth-switch {
+      text-align: center; font-size: 12px; color: #888; margin-top: 2px;
+    }
+    .af-auth-switch a {
+      color: ${theme.primary}; font-weight: 700; cursor: pointer;
+      text-decoration: none;
+    }
+    .af-auth-switch a:hover { text-decoration: underline; }
+
+    .af-auth-error {
+      background: #fdecea; color: #b71c1c; border: 1px solid #ffcdd2;
+      border-radius: 8px; padding: 9px 12px; font-size: 12px;
+      display: none; align-items: center; gap: 7px;
+    }
+    .af-auth-error.visible { display: flex; }
+
+    .af-auth-success {
+      background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9;
+      border-radius: 8px; padding: 9px 12px; font-size: 12px;
+      display: none; align-items: center; gap: 7px;
+    }
+    .af-auth-success.visible { display: flex; }
+
+    .af-auth-divider {
+      display: flex; align-items: center; gap: 10px; color: #ccc; font-size: 11px;
+    }
+    .af-auth-divider::before,
+    .af-auth-divider::after {
+      content: ""; flex: 1; border-top: 1px solid #e5e5e5;
+    }
+
+    /* User avatar chip in header (shown after login) */
+    #af-user-chip {
+      display: none; align-items: center; gap: 5px;
+      font-size: 11px; color: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.15); border-radius: 20px;
+      padding: 3px 10px 3px 6px; cursor: pointer;
+    }
+    #af-user-chip.visible { display: flex; }
+    #af-user-chip:hover { background: rgba(255,255,255,0.25); }
+    .af-uc-avatar {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: rgba(255,255,255,0.3); display: flex;
+      align-items: center; justify-content: center; font-size: 10px; font-weight: 700;
+    }
+
+    /* Logout dropdown */
+    #af-user-menu {
+      display: none; position: absolute; top: 52px; right: 12px; z-index: 40;
+      background: white; border: 1px solid #e5e5e5; border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 160px; overflow: hidden;
+    }
+    #af-user-menu.open { display: block; }
+    .af-um-item {
+      padding: 10px 14px; font-size: 12px; cursor: pointer; color: #333;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .af-um-item:hover { background: #f5f5f5; }
+    .af-um-item.danger { color: #e53935; }
+    .af-um-sep { border-top: 1px solid #f0f0f0; margin: 2px 0; }
   flex: 1; 
   padding: 14px 14px 20px; 
   overflow-y: scroll; /* Force the scrollbar area to exist */
@@ -312,11 +468,28 @@
       padding: 12px 14px; background: ${theme.primary}; color: white;
       font-size: 13px; font-weight: 700; flex-shrink: 0;
     }
-    .af-fp-close { cursor: pointer; font-size: 16px; opacity: 0.75; }
+    .af-fp-header-left { display: flex; align-items: center; gap: 8px; }
+    .af-fp-close {
+      cursor: pointer; opacity: 0.75; display: flex; align-items: center;
+      background: none; border: none; color: white; padding: 2px;
+    }
     .af-fp-close:hover { opacity: 1; }
+    /* File panel tabs */
+    .af-fp-tabs {
+      display: flex; flex-shrink: 0;
+      border-bottom: 1px solid #e4e4e4; background: white;
+    }
+    .af-fp-tab {
+      flex: 1; padding: 9px 4px; font-size: 11px; font-weight: 700;
+      color: #aaa; border: none; background: none; cursor: pointer;
+      border-bottom: 2px solid transparent; display: flex; align-items: center;
+      justify-content: center; gap: 5px; transition: color 0.15s;
+    }
+    .af-fp-tab.active { color: ${theme.primary}; border-bottom-color: ${theme.primary}; }
+    .af-fp-tab:hover:not(.active) { color: #666; }
     .af-fp-notice {
-      background: #fff8e1; border-bottom: 1px solid #ffe082;
-      padding: 7px 14px; font-size: 11px; color: #7a5c00;
+      background: #e8f5e9; border-bottom: 1px solid #c8e6c9;
+      padding: 7px 14px; font-size: 11px; color: #2e7d32;
       display: flex; align-items: center; gap: 6px; flex-shrink: 0;
     }
     .af-fp-list { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -325,7 +498,7 @@
       background: white; border: 1px solid #e4e4e4; border-radius: 10px;
       padding: 10px 12px; display: flex; align-items: center; gap: 10px;
     }
-    .af-fp-item-icon { font-size: 20px; flex-shrink: 0; }
+    .af-fp-item-icon { flex-shrink: 0; color: ${theme.primary}; opacity: 0.8; }
     .af-fp-item-info { flex: 1; min-width: 0; }
     .af-fp-item-name { font-size: 12px; font-weight: 600; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .af-fp-item-meta { font-size: 10px; color: #888; margin-top: 2px; }
@@ -335,10 +508,16 @@
     }
     .af-fp-item-badge.sent { background: ${theme.light}; color: ${theme.primary}; }
     .af-fp-item-badge.received { background: #e8f5e9; color: #2e7d32; }
+    .af-lib-badge {
+      font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+      background: ${theme.light}; color: ${theme.primary}; flex-shrink: 0;
+      text-transform: uppercase; letter-spacing: 0.4px;
+    }
     .af-fp-item-dl {
-      padding: 5px 10px; background: ${theme.primary}; color: white;
+      padding: 6px; background: ${theme.primary}; color: white;
       border: none; border-radius: 6px; font-size: 11px; font-weight: 600;
       cursor: pointer; flex-shrink: 0; transition: opacity 0.18s;
+      display: flex; align-items: center;
     }
     .af-fp-item-dl:hover { opacity: 0.85; }
     .af-fp-footer {
@@ -347,14 +526,14 @@
     }
     .af-fp-clear {
       font-size: 11px; color: #aaa; background: none; border: none;
-      cursor: pointer; padding: 4px 8px;
+      cursor: pointer; padding: 4px 8px; display: flex; align-items: center; gap: 5px;
     }
     .af-fp-clear:hover { color: #e53935; }
-
     /* ── Files badge on header btn ── */
     #af-files-btn {
-      background: none; border: none; cursor: pointer; font-size: 14px;
+      background: none; border: none; cursor: pointer;
       color: rgba(255,255,255,0.8); padding: 4px; position: relative;
+      display: flex; align-items: center;
     }
     #af-files-btn:hover { color: white; }
     .af-files-badge {
@@ -583,34 +762,6 @@
 /* Files Panel Loader */
 .af-fp-loading { text-align: center; padding: 20px; color: #888; font-size: 13px; }
 
-    /* ── Usage card (shown by /usage command) ── */
-    .af-usage-card {
-      background: white; border: 1.5px solid ${theme.primary}33;
-      border-radius: 14px; align-self: flex-start; width: 92%;
-      box-shadow: 0 3px 14px rgba(0,0,0,0.07); overflow: hidden;
-      flex-shrink: 0;
-    }
-    .af-usage-header {
-      background: ${theme.primary}; color: white;
-      padding: 10px 14px; display: flex; align-items: center; gap: 8px;
-      font-size: 13px; font-weight: 700;
-    }
-    .af-usage-grid {
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 1px; background: #f0f0f0; border-top: 1px solid #f0f0f0;
-    }
-    .af-usage-cell {
-      background: white; padding: 12px 14px;
-      display: flex; flex-direction: column; gap: 3px;
-    }
-    .af-usage-cell.full { grid-column: 1 / -1; }
-    .af-uc-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-    .af-uc-value { font-size: 18px; font-weight: 800; color: #111; font-family: monospace; }
-    .af-uc-sub   { font-size: 10px; color: #bbb; margin-top: 1px; }
-    .af-usage-footer {
-      padding: 8px 14px; border-top: 1px solid #f0f0f0;
-      font-size: 10px; color: #bbb; text-align: center;
-    }
   `;
   document.head.appendChild(style);
 
@@ -618,12 +769,154 @@
   const launcher = document.createElement("button");
   launcher.id   = "af-launcher";
   launcher.type = "button";
-  launcher.innerHTML = "<img src='https://dominicyogi.github.io/agentflow-widget/liontech.png' style='width:34px;height:34px;object-fit:contain;border-radius:50%;' alt='Logo' />";
+  launcher.setAttribute("aria-label", "Open chat");
+  launcher.innerHTML = `
+    <!-- Logo icon (default) -->
+    <span class="af-icon-logo">
+      <img src='https://dominicyogi.github.io/agentflow-widget/liontech.png'
+           style='width:34px;height:34px;object-fit:contain;border-radius:50%;display:block;'
+           alt='Chat' />
+    </span>
+    <!-- Close X icon (shown when panel is open) -->
+    <span class="af-icon-close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"
+           stroke-linecap="round" style="width:26px;height:26px;">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6"  y1="6" x2="18" y2="18"/>
+      </svg>
+    </span>
+  `;
   document.body.appendChild(launcher);
 
   const panel = document.createElement("div");
   panel.id = "af-panel";
   panel.innerHTML = `
+    <!-- ══ AUTH SCREEN ═══════════════════════════════════ -->
+    <div id="af-auth-screen">
+      <div class="af-auth-header">
+        <img class="af-auth-logo" src="https://dominicyogi.github.io/agentflow-widget/liontech.png" alt="Logo" />
+        <div class="af-auth-header-text">
+          <div class="af-auth-header-title">LionTech Support</div>
+          <div class="af-auth-header-sub" id="af-auth-org-sub">Sign in to continue</div>
+        </div>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <div id="af-auth-login" class="af-auth-body">
+        <div>
+          <h2 class="af-auth-title">Welcome back</h2>
+          <p class="af-auth-subtitle">Sign in to your account</p>
+        </div>
+        <div id="af-login-error" class="af-auth-error">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="af-login-error-msg"></span>
+        </div>
+        <div class="af-auth-field">
+          <label>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Email
+          </label>
+          <input type="email" id="af-login-email" placeholder="you@organisation.com" autocomplete="email" />
+        </div>
+        <div class="af-auth-field">
+          <label>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Password
+          </label>
+          <input type="password" id="af-login-password" placeholder="Your password" autocomplete="current-password" />
+        </div>
+        <button class="af-auth-btn" id="af-login-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Sign in
+        </button>
+        <div class="af-auth-switch">
+          <a id="af-goto-forgot">Forgot password?</a>
+        </div>
+        <div class="af-auth-divider">or</div>
+        <div class="af-auth-switch">
+          Don't have an account? <a id="af-goto-signup">Create one</a>
+        </div>
+      </div>
+
+      <!-- SIGNUP FORM -->
+      <div id="af-auth-signup" class="af-auth-body" style="display:none">
+        <div>
+          <h2 class="af-auth-title">Create account</h2>
+          <p class="af-auth-subtitle">Join your organisation's workspace</p>
+        </div>
+        <div id="af-signup-error" class="af-auth-error">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="af-signup-error-msg"></span>
+        </div>
+        <div id="af-signup-success" class="af-auth-success">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Account created! Signing you in...</span>
+        </div>
+        <div class="af-auth-row">
+          <div class="af-auth-field">
+            <label>First name</label>
+            <input type="text" id="af-signup-first" placeholder="Ada" autocomplete="given-name" />
+          </div>
+          <div class="af-auth-field">
+            <label>Last name</label>
+            <input type="text" id="af-signup-last" placeholder="Lovelace" autocomplete="family-name" />
+          </div>
+        </div>
+        <div class="af-auth-field">
+          <label>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Email
+          </label>
+          <input type="email" id="af-signup-email" placeholder="you@organisation.com" autocomplete="email" />
+        </div>
+        <div class="af-auth-field">
+          <label>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Password <span style="color:#bbb;font-weight:400;">(min 8 chars)</span>
+          </label>
+          <input type="password" id="af-signup-password" placeholder="Choose a strong password" autocomplete="new-password" />
+        </div>
+        <button class="af-auth-btn" id="af-signup-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          Create account
+        </button>
+        <div class="af-auth-switch">
+          Already have an account? <a id="af-goto-login">Sign in</a>
+        </div>
+      </div>
+
+      <!-- FORGOT PASSWORD FORM -->
+      <div id="af-auth-forgot" class="af-auth-body" style="display:none">
+        <div>
+          <h2 class="af-auth-title">Reset password</h2>
+          <p class="af-auth-subtitle">We'll send a reset link to your email</p>
+        </div>
+        <div id="af-forgot-error" class="af-auth-error">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span id="af-forgot-error-msg"></span>
+        </div>
+        <div id="af-forgot-success" class="af-auth-success">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <span>Check your inbox — a reset link is on its way.</span>
+        </div>
+        <div class="af-auth-field">
+          <label>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Email address
+          </label>
+          <input type="email" id="af-forgot-email" placeholder="you@organisation.com" autocomplete="email" />
+        </div>
+        <button class="af-auth-btn" id="af-forgot-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Send reset link
+        </button>
+        <div class="af-auth-switch">
+          <a id="af-goto-login2">Back to sign in</a>
+        </div>
+      </div>
+    </div><!-- end #af-auth-screen -->
+
+    <!-- ══ MAIN CHAT PANEL ═══════════════════════════════ -->
     <div id="af-header">
       <div class="af-hinfo">
         <div class="af-title"><img src='https://dominicyogi.github.io/agentflow-widget/liontech.png' style='width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:5px;' alt='Logo' />LionTech Support</div>
@@ -633,29 +926,77 @@
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;">
           <div class="af-dot" id="af-status-dot"></div><span id="af-status-label">Live</span>
         </div>
-        <button id="af-files-btn" title="Files">📁<span class="af-files-badge" id="af-files-badge" style="display:none"></span></button>
-        <span id="af-close">✕</span>
+        <!-- User chip — shown after login -->
+        <div id="af-user-chip">
+          <div class="af-uc-avatar" id="af-uc-initials"></div>
+          <span id="af-uc-name"></span>
+        </div>
+        <!-- User dropdown menu -->
+        <div id="af-user-menu">
+          <div class="af-um-item" id="af-um-profile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            My profile
+          </div>
+          <div class="af-um-sep"></div>
+          <div class="af-um-item danger" id="af-um-logout">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Sign out
+          </div>
+        </div>
+        <button id="af-files-btn" title="Files &amp; Library">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span class="af-files-badge" id="af-files-badge" style="display:none"></span>
+        </button>
       </div>
     </div>
     <!-- Network warning banner -->
     <div id="af-net-banner">
-      <span class="af-nb-icon" id="af-nb-icon">⚠️</span>
-      <span class="af-nb-msg"  id="af-nb-msg">Connection issue</span>
+      <span class="af-nb-icon" id="af-nb-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </span>
+      <span class="af-nb-msg" id="af-nb-msg">Connection issue</span>
       <button class="af-nb-retry" id="af-nb-retry">Retry</button>
     </div>
-    <!-- session bar removed — use /usage command instead -->
-    <!-- Files panel overlay -->
+    <!-- Bot offline banner -->
+    <div id="af-bot-offline-banner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>The assistant is currently offline. Please try again later.</span>
+    </div>
+
+    <!-- Files / Library panel overlay -->
     <div id="af-files-panel">
       <div class="af-fp-header">
-        <span>📁 Files</span>
-        <span class="af-fp-close" id="af-fp-close">✕</span>
+        <div class="af-fp-header-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Files &amp; Library
+        </div>
+        <button class="af-fp-close" id="af-fp-close" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:15px;height:15px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
-      <div class=\"af-fp-notice\" style=\"background:#e8f5e9;border-color:#c8e6c9;color:#2e7d32;\">☁️ Files are stored in Cloudflare R2 — available for re-download anytime</div>
+      <!-- Tabs -->
+      <div class="af-fp-tabs">
+        <button class="af-fp-tab active" id="af-tab-library" data-tab="library">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Library
+        </button>
+        <button class="af-fp-tab" id="af-tab-workspace" data-tab="workspace">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          My Files
+        </button>
+      </div>
+      <div class="af-fp-notice" id="af-fp-notice">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>
+        <span id="af-fp-notice-text">Reference files shared by your organisation</span>
+      </div>
       <div class="af-fp-list" id="af-fp-list">
-        <div class="af-fp-empty">No files yet. Send or receive a file to see it here.</div>
+        <div class="af-fp-empty">Loading files...</div>
       </div>
       <div class="af-fp-footer">
-        <button class="af-fp-clear" id="af-fp-clear">🗑 Clear all files</button>
+        <button class="af-fp-clear" id="af-fp-clear">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Clear workspace files
+        </button>
       </div>
     </div>
 
@@ -667,11 +1008,13 @@
 
     <!-- Voice note preview bar (shown after recording stops) -->
     <div id="af-voice-preview">
-      <span class="vp-icon">🎤</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="vp-icon" style="width:14px;height:14px;flex-shrink:0;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
       <span class="vp-label">Voice:</span>
       <input id="af-vp-text" type="text" placeholder="Edit your message..." />
       <button id="af-vp-send">Send</button>
-      <button id="af-vp-discard">✕</button>
+      <button id="af-vp-discard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
 
     <!-- Recording indicator -->
@@ -683,21 +1026,245 @@
     </div>
 
     <div id="af-input-area">
-      <label id="af-attach-btn" for="af-file-input" title="Attach image">${ICONS.image}</label>
+      <label id="af-attach-btn" for="af-file-input" title="Attach file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:1.2em;height:1.2em;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      </label>
       <input id="af-file-input" type="file" multiple accept="image/*" />
       <input id="af-input" type="text" placeholder="Ask me anything..." disabled />
       <button id="af-mic" type="button" disabled>${ICONS.mic}</button>
       <button id="af-send" type="button" disabled>${ICONS.send}</button>
     </div>
     <div id="af-branding">Powered by <a href="#">LionTech</a></div>
+
   `;
   document.body.appendChild(panel);
 
   // ── Panel toggle ──────────────────────────────────────
-  launcher.addEventListener("click", () => panel.classList.toggle("open"));
-  document.getElementById("af-close").addEventListener("click", () => panel.classList.remove("open"));
+  // The launcher button itself is the only open/close control.
+  // Adding .open to the launcher triggers the logo→X icon morph via CSS.
+  function openPanel()  {
+    panel.classList.add("open");
+    launcher.classList.add("open");
+    launcher.setAttribute("aria-label", "Close chat");
+  }
+  function closePanel() {
+    panel.classList.remove("open");
+    launcher.classList.remove("open");
+    launcher.setAttribute("aria-label", "Open chat");
+  }
+  function togglePanel() {
+    panel.classList.contains("open") ? closePanel() : openPanel();
+  }
+  launcher.addEventListener("click", togglePanel);
 
-  // ── Session helpers ───────────────────────────────────
+  // ════════════════════════════════════════════════════════
+  // ── AUTH — JWT storage + screen management ────────────
+  // ════════════════════════════════════════════════════════
+  const AUTH_KEY = "af_auth_" + (API_KEY || "default");
+
+  function saveAuth(token, user, org) {
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user, org })); } catch {}
+  }
+  function loadAuth() {
+    try { return JSON.parse(localStorage.getItem(AUTH_KEY)); } catch { return null; }
+  }
+  function clearAuth() {
+    try { localStorage.removeItem(AUTH_KEY); } catch {}
+    widgetUser  = null;
+    widgetOrg   = null;
+    widgetToken = null;
+  }
+
+  // Decode JWT expiry without a library
+  function isTokenExpired(token) {
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      return payload.exp && Date.now() / 1000 > payload.exp;
+    } catch { return true; }
+  }
+
+  // Show/hide auth screen
+  function showAuthScreen(form) {
+    // form: 'login' | 'signup' | 'forgot'
+    document.getElementById("af-auth-screen").classList.remove("hidden");
+    document.getElementById("af-auth-login").style.display  = form === "login"  ? "flex" : "none";
+    document.getElementById("af-auth-signup").style.display = form === "signup" ? "flex" : "none";
+    document.getElementById("af-auth-forgot").style.display = form === "forgot" ? "flex" : "none";
+  }
+  function hideAuthScreen() {
+    document.getElementById("af-auth-screen").classList.add("hidden");
+  }
+
+  // Update the user chip in the header
+  function setUserChip(user) {
+    const chip    = document.getElementById("af-user-chip");
+    const initEl  = document.getElementById("af-uc-initials");
+    const nameEl  = document.getElementById("af-uc-name");
+    if (!chip) return;
+    if (!user) { chip.classList.remove("visible"); return; }
+    const initials = ((user.firstName || "")[0] + (user.lastName || "")[0]).toUpperCase() || "?";
+    initEl.textContent = initials;
+    nameEl.textContent = user.firstName || user.email;
+    chip.classList.add("visible");
+  }
+
+  // Auth error/success helpers
+  function showAuthError(prefix, msg) {
+    const el   = document.getElementById("af-" + prefix + "-error");
+    const span = document.getElementById("af-" + prefix + "-error-msg");
+    if (span) span.textContent = msg;
+    if (el)   el.classList.add("visible");
+  }
+  function hideAuthError(prefix) {
+    const el = document.getElementById("af-" + prefix + "-error");
+    if (el) el.classList.remove("visible");
+  }
+  function showAuthSuccess(prefix) {
+    const el = document.getElementById("af-" + prefix + "-success");
+    if (el) el.classList.add("visible");
+  }
+
+  // Called after successful login or signup — hand off to init()
+  function onAuthSuccess(token, user, org) {
+    saveAuth(token, user, org);
+    widgetUser  = user;
+    widgetOrg   = org;
+    widgetToken = token;
+    hideAuthScreen();
+    setUserChip(user);
+    // Update the Authorization header going forward
+    init();
+  }
+
+  // ── Navigation between auth forms ─────────────────────
+  document.getElementById("af-goto-signup").addEventListener("click", () => {
+    hideAuthError("login"); showAuthScreen("signup");
+  });
+  document.getElementById("af-goto-login").addEventListener("click", () => {
+    hideAuthError("signup"); showAuthScreen("login");
+  });
+  document.getElementById("af-goto-forgot").addEventListener("click", () => {
+    hideAuthError("login"); showAuthScreen("forgot");
+  });
+  document.getElementById("af-goto-login2").addEventListener("click", () => {
+    hideAuthError("forgot"); showAuthScreen("login");
+  });
+
+  // ── Login submit ───────────────────────────────────────
+  async function doLogin() {
+    hideAuthError("login");
+    const email    = document.getElementById("af-login-email").value.trim();
+    const password = document.getElementById("af-login-password").value;
+    const btn      = document.getElementById("af-login-btn");
+    if (!email || !password) { showAuthError("login", "Please enter your email and password."); return; }
+    btn.disabled = true;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;animation:af-spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Signing in...`;
+    try {
+      const res  = await fetch(BACKEND_URL + "/api/user/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+        body:   JSON.stringify({ apiKey: API_KEY, email, password })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Login failed.");
+      onAuthSuccess(data.token, data.user, data.org);
+    } catch (err) {
+      showAuthError("login", err.message);
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Sign in`;
+    }
+  }
+  document.getElementById("af-login-btn").addEventListener("click", doLogin);
+  document.getElementById("af-login-password").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+  document.getElementById("af-login-email").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("af-login-password").focus(); });
+
+  // ── Signup submit ──────────────────────────────────────
+  async function doSignup() {
+    hideAuthError("signup");
+    const firstName = document.getElementById("af-signup-first").value.trim();
+    const lastName  = document.getElementById("af-signup-last").value.trim();
+    const email     = document.getElementById("af-signup-email").value.trim();
+    const password  = document.getElementById("af-signup-password").value;
+    const btn       = document.getElementById("af-signup-btn");
+    if (!firstName || !lastName || !email || !password) {
+      showAuthError("signup", "All fields are required."); return;
+    }
+    if (password.length < 8) { showAuthError("signup", "Password must be at least 8 characters."); return; }
+    btn.disabled = true;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;animation:af-spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Creating account...`;
+    try {
+      const res  = await fetch(BACKEND_URL + "/api/user/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+        body:   JSON.stringify({ apiKey: API_KEY, firstName, lastName, email, password })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Signup failed.");
+      showAuthSuccess("signup");
+      setTimeout(() => onAuthSuccess(data.token, data.user, data.org), 1200);
+    } catch (err) {
+      showAuthError("signup", err.message);
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg> Create account`;
+    }
+  }
+  document.getElementById("af-signup-btn").addEventListener("click", doSignup);
+
+  // ── Forgot password submit ─────────────────────────────
+  async function doForgot() {
+    hideAuthError("forgot");
+    const email = document.getElementById("af-forgot-email").value.trim();
+    const btn   = document.getElementById("af-forgot-btn");
+    if (!email) { showAuthError("forgot", "Please enter your email address."); return; }
+    btn.disabled = true;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;animation:af-spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Sending...`;
+    try {
+      const res  = await fetch(BACKEND_URL + "/api/user/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+        body:   JSON.stringify({ apiKey: API_KEY, email })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showAuthSuccess("forgot");
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> Email sent`;
+      } else {
+        throw new Error(data.error || "Request failed.");
+      }
+    } catch (err) {
+      showAuthError("forgot", err.message);
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Send reset link`;
+    }
+  }
+  document.getElementById("af-forgot-btn").addEventListener("click", doForgot);
+
+  // ── User chip toggle (dropdown) ────────────────────────
+  document.getElementById("af-user-chip").addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.getElementById("af-user-menu").classList.toggle("open");
+  });
+  document.addEventListener("click", () => {
+    document.getElementById("af-user-menu")?.classList.remove("open");
+  });
+  document.getElementById("af-um-logout").addEventListener("click", () => {
+    if (!confirm("Sign out?")) return;
+    clearAuth();
+    clearSession();
+    document.getElementById("af-user-menu").classList.remove("open");
+    // Clear the messages area and show auth screen
+    document.getElementById("af-messages").innerHTML = '<div class="af-msg thinking">Sign in to continue...</div>';
+    setUserChip(null);
+    showAuthScreen("login");
+  });
+
+  // ── Spin keyframe (for loading spinners) ──────────────
+  if (!document.getElementById("af-spin-style")) {
+    const ss = document.createElement("style");
+    ss.id = "af-spin-style";
+    ss.textContent = "@keyframes af-spin { to { transform: rotate(360deg); } }";
+    document.head.appendChild(ss);
+  }
   function saveSession() {
     try {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify({
@@ -711,8 +1278,6 @@
   function clearSession() {
     try { sessionStorage.removeItem(SESSION_KEY); } catch {}
     conversationHistory = [];
-    // Reset session stats too
-    sessionStats = { messages: 0, inputTokens: 0, outputTokens: 0 };
   }
 
   // ── Message helpers ───────────────────────────────────
@@ -881,7 +1446,7 @@
     // Fetch live count from server so badge is accurate after browser restarts
     fetchWithTimeout(
       `${BACKEND_URL}/api/agent/workspace?deviceId=${encodeURIComponent(deviceInfo.deviceId)}`,
-      { headers: { "x-api-key": API_KEY, "ngrok-skip-browser-warning": "true" } },
+      { headers: { ...authHeaders(), "ngrok-skip-browser-warning": "true" } },
       8000
     )
     .then(r => r.json())
@@ -924,47 +1489,92 @@
   }
 
   // ── New: Fetch and Render Files from Server ──────────
-async function renderFilesPanel() {
-  const list = document.getElementById("af-fp-list");
-  list.innerHTML = '<div class="af-fp-loading">Loading your workspace...</div>';
+// ── Active file panel tab: 'library' | 'workspace' ──
+  let filePanelTab = "library";
 
-  try {
-    // We pass the deviceId in the headers so the server can filter the files
-    const res = await fetchWithRetry(`${BACKEND_URL}/api/agent/workspace?deviceId=${deviceInfo.deviceId}`, {
-      headers: { 
-        "x-api-key": API_KEY,
-        "ngrok-skip-browser-warning": "true" 
+  async function renderFilesPanel(tab) {
+    if (tab) filePanelTab = tab;
+    const list = document.getElementById("af-fp-list");
+    const notice = document.getElementById("af-fp-notice");
+    const noticeText = document.getElementById("af-fp-notice-text");
+
+    // Update tab active state
+    document.querySelectorAll(".af-fp-tab").forEach(t => {
+      t.classList.toggle("active", t.dataset.tab === filePanelTab);
+    });
+
+    if (filePanelTab === "library") {
+      notice.style.display = "flex";
+      noticeText.textContent = "Reference files shared by your organisation — available to download anytime";
+      list.innerHTML = '<div class="af-fp-loading" style="text-align:center;padding:20px;color:#888;font-size:13px;">Loading library...</div>';
+      try {
+        const res  = await fetchWithRetry(BACKEND_URL + "/api/agent/library", {
+          headers: authHeaders()
+        }, { timeout: adaptiveTimeout(12000), retries: 2 });
+        const data = await res.json();
+        if (!data.success || !data.files || data.files.length === 0) {
+          list.innerHTML = '<div class="af-fp-empty">No library files yet. Your admin can upload reference documents from the admin panel.</div>';
+          return;
+        }
+        list.innerHTML = data.files.map(f => `
+          <div class="af-fp-item">
+            <div class="af-fp-item-icon">${ICONS.file}</div>
+            <div class="af-fp-item-info">
+              <div class="af-fp-item-name">${escHtml(f.label || f.filename)}</div>
+              <div class="af-fp-item-meta">${f.size ? formatBytes(f.size) : ""} &nbsp;·&nbsp; ${f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : ""}</div>
+            </div>
+            <span class="af-lib-badge">Library</span>
+            <button class="af-fp-item-dl" onclick="afDownloadLibFile('${escHtml(f.filename)}')" title="Download">${ICONS.download}</button>
+          </div>`).join("");
+      } catch (err) {
+        list.innerHTML = '<div class="af-fp-empty">Could not load library — check your connection.</div>';
       }
-    }, { timeout: adaptiveTimeout(12000), retries: 2 });
-    const data = await res.json();
-    
-    if (!data.success || !data.files || data.files.length === 0) {
-      list.innerHTML = '<div class="af-fp-empty">No files in your workspace yet.</div>';
-      return;
+
+    } else {
+      // Workspace tab
+      notice.style.display = "flex";
+      noticeText.textContent = "Files generated or shared in your AI chat sessions";
+      list.innerHTML = '<div class="af-fp-loading" style="text-align:center;padding:20px;color:#888;font-size:13px;">Loading workspace...</div>';
+      try {
+        const res  = await fetchWithRetry(`${BACKEND_URL}/api/agent/workspace?deviceId=${deviceInfo.deviceId}`, {
+          headers: authHeaders()
+        }, { timeout: adaptiveTimeout(12000), retries: 2 });
+        const data = await res.json();
+        if (!data.success || !data.files || data.files.length === 0) {
+          list.innerHTML = '<div class="af-fp-empty">No workspace files yet. Files the AI generates or you share will appear here.</div>';
+          return;
+        }
+        list.innerHTML = data.files.map(f => `
+          <div class="af-fp-item">
+            <div class="af-fp-item-icon">${ICONS.file}</div>
+            <div class="af-fp-item-info">
+              <div class="af-fp-item-name">${escHtml(f.name)}</div>
+              <div class="af-fp-item-meta">${formatBytes(f.size)}</div>
+            </div>
+            <button class="af-fp-item-dl" onclick="afDownloadFile('${escHtml(f.name)}')" title="Download">${ICONS.download}</button>
+            <button class="af-fp-delete" onclick="afDeleteFile('${escHtml(f.name)}')" title="Delete" style="padding:6px;background:none;border:none;cursor:pointer;color:#ccc;display:flex;align-items:center;">${ICONS.trash}</button>
+          </div>`).join("");
+      } catch (err) {
+        list.innerHTML = '<div class="af-fp-empty">Could not load workspace — check your connection.</div>';
+      }
     }
-
-    const icons = {
-      pdf: "📄", doc: "📝", docx: "📝", txt: "📑", 
-      csv: "📊", xlsx: "📊", png: "🖼️", jpg: "🖼️"
-    };
-
-    list.innerHTML = data.files.map((f) => {
-      return `
-        <div class="af-fp-item">
-          <div class="af-fp-item-icon">${ICONS.file}</div>
-          <div class="af-fp-item-info">
-            <div class="af-fp-item-name">${escHtml(f.name)}</div>
-            <div class="af-fp-item-meta">${formatBytes(f.size)}</div>
-          </div>
-          <button class="af-fp-item-dl" onclick="afDownloadFile('${f.name}')">${ICONS.download}</button>
-          <button class="af-fp-delete" onclick="afDeleteFile('${f.name}')">${ICONS.trash}</button>
-        </div>`;
-    }).join("");
-
-  } catch (err) {
-    list.innerHTML = '<div class="af-fp-empty">⚠️ Could not load files — check your connection and try again.</div>';
   }
-}
+
+  // Library file download
+  window.afDownloadLibFile = function(filename) {
+    const url = `${BACKEND_URL}/api/agent/library/${encodeURIComponent(filename)}`;
+    // Use fetch with auth header, then blob-download
+    fetch(url, { headers: authHeaders() })
+      .then(r => r.blob())
+      .then(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      })
+      .catch(() => alert("Could not download file. Please try again."));
+  };
 
 // ── New: Delete Specific File ────────────────────────
 window.afDeleteFile = async function(filename) {
@@ -1006,18 +1616,27 @@ window.afDownloadFile = function(filename) {
 
   // ── Wire up files panel toggle ─────────────────────────
   document.getElementById("af-files-btn").addEventListener("click", function() {
-    renderFilesPanel();
+    renderFilesPanel(filePanelTab || "library");
     document.getElementById("af-files-panel").classList.add("open");
   });
   document.getElementById("af-fp-close").addEventListener("click", function() {
     document.getElementById("af-files-panel").classList.remove("open");
   });
   document.getElementById("af-fp-clear").addEventListener("click", function() {
-    if (confirm("Clear all stored files? This cannot be undone.")) {
+    if (filePanelTab === "library") {
+      alert("Library files are managed by your administrator.");
+      return;
+    }
+    if (confirm("Clear all workspace files? This cannot be undone.")) {
       localStorage.removeItem(FILES_KEY);
       updateFilesBadge();
-      renderFilesPanel();
+      renderFilesPanel("workspace");
     }
+  });
+
+  // Wire tab clicks
+  document.querySelectorAll(".af-fp-tab").forEach(btn => {
+    btn.addEventListener("click", () => renderFilesPanel(btn.dataset.tab));
   });
 
   // Init badge on load
@@ -1127,7 +1746,7 @@ window.afDownloadFile = function(filename) {
 
     recognition.onerror = () => {
       stopRecordingUI();
-      addMsg("warning", "⚠️ Couldn't capture voice. Try again or type your message.", false);
+      addMsg("warning", "Could not capture voice. Try again or type your message.", false);
     };
 
     recognition.onresult = (e) => {
@@ -1246,7 +1865,7 @@ window.afDownloadFile = function(filename) {
       const operator = detectOperator();
       fetchWithRetry(BACKEND_URL + "/api/agent/confirm", {
         method:  "POST",
-        headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+        headers: { ...authHeaders({"Content-Type":"application/json"}) },
         body: JSON.stringify({
           command:       pendingPlan ? pendingPlan.originalCommand : "",
           action:        pendingPlan ? pendingPlan.taskType        : "task",
@@ -1409,7 +2028,7 @@ window.afDownloadFile = function(filename) {
           if (!beaconSent) {
             fetchWithRetry(BACKEND_URL + "/api/agent/confirm", {
               method:  "POST",
-              headers: { "x-api-key": API_KEY, "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+              headers: { ...authHeaders({"Content-Type":"application/json"}) },
               body:    auditPayload
             }, { timeout: 5000, retries: 0 }).catch(() => {});
           }
@@ -1570,14 +2189,14 @@ window.afDownloadFile = function(filename) {
     card.className = "af-confirm-card";
     card.innerHTML =
       "<div class=\"af-confirm-header\">" +
-        "<span class=\"af-confirm-header-label\">⚡ Planned Action</span>" +
+        "<span class=\"af-confirm-header-label\">Planned Action</span>" +
         "<span class=\"af-confirm-header-count\">" + actions.length + " step" + (actions.length !== 1 ? "s" : "") + "</span>" +
       "</div>" +
       "<div class=\"af-confirm-goal\">" + escHtml(goal) + "</div>" +
       (rowsHtml ? "<div class=\"af-confirm-rows\">" + rowsHtml + "</div>" : "") +
       "<div class=\"af-confirm-btns\">" +
-        "<button class=\"af-btn-yes\" type=\"button\">✅ Yes, do it</button>" +
-        "<button class=\"af-btn-no\"  type=\"button\">✕ Cancel</button>" +
+        "<button class=\"af-btn-yes\" type=\"button\">Confirm</button>" +
+        "<button class=\"af-btn-no\"  type=\"button\">Cancel</button>" +
       "</div>";
 
     var msgs = document.getElementById("af-messages");
@@ -1693,7 +2312,7 @@ window.afDownloadFile = function(filename) {
   const thumbsHtml = renderAttachmentThumbs(currentAttachments);
   addMsg("user", message + thumbsHtml);
 
-  const thinking = addMsg("thinking", "🧠 Thinking...", false);
+  const thinking = addMsg("thinking", "Thinking...", false);
 
   try {
     // 4. Upload Documents to the server workspace first
@@ -1710,8 +2329,7 @@ window.afDownloadFile = function(filename) {
       await fetchWithRetry(BACKEND_URL + "/api/agent/upload", {
         method: "POST",
         headers: { 
-          "x-api-key": API_KEY,
-          "ngrok-skip-browser-warning": "true" 
+          ...authHeaders() 
         },
         body: formData
       }, { timeout: adaptiveTimeout(30000), retries: 1 });
@@ -1732,7 +2350,7 @@ window.afDownloadFile = function(filename) {
     const res = await fetchWithRetry(BACKEND_URL + "/api/agent/message", {
       method: "POST",
       headers: { 
-        "x-api-key": API_KEY, 
+        ...authHeaders(), 
         "Content-Type": "application/json", 
         "ngrok-skip-browser-warning": "true",
         "x-connection-quality": networkStatus   // hint for server-side adaptation
@@ -1756,16 +2374,6 @@ window.afDownloadFile = function(filename) {
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Unknown error");
 
-    // ── Track session token usage ─────────────────────────────────────────
-    // The backend returns data.usage when token tracking is enabled.
-    if (data.usage) {
-      sessionStats.messages++;
-      sessionStats.inputTokens  += data.usage.inputTokens  || 0;
-      sessionStats.outputTokens += data.usage.outputTokens || 0;
-    } else {
-      // Still increment message count even if usage isn't available yet
-      sessionStats.messages++;
-    }
     // ── Robust JSON extractor: mirrors backend extractJSON logic ─────────
     // Finds and returns the first complete JSON object inside any string,
     // even if the model added a preamble, trailing text, or markdown fences.
@@ -1895,7 +2503,7 @@ window.afDownloadFile = function(filename) {
 
       fetchWithRetry(BACKEND_URL + "/api/agent/learn-page", {
         method: "POST",
-        headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
+        headers: { ...authHeaders({"Content-Type":"application/json"}) },
         body: JSON.stringify({
           pageData,
           url:      window.location.href,
@@ -1912,102 +2520,7 @@ window.afDownloadFile = function(filename) {
     }
     // ---------------------------------------------------------
 
-    // --- /usage command — show session + monthly token stats ---
-    if (text === "/usage") {
-      input.value = "";
 
-      function fmtM(n) {
-        if (!n) return "0";
-        if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
-        if (n >= 1_000)     return (n / 1_000).toFixed(1) + "k";
-        return String(n);
-      }
-      function sessionCost(s) {
-        return ((s.inputTokens / 1_000_000) * 3 + (s.outputTokens / 1_000_000) * 15).toFixed(6);
-      }
-
-      function buildBar(pct) {
-  const filled = Math.round(pct / 10);
-  const empty  = 10 - filled;
-  return "&#9632;".repeat(filled) + "&#9633;".repeat(empty); // ■■■□□□
-}
-
-      function renderUsageCard(monthly) {
-  const msgs = document.getElementById("af-messages");
-  const card = document.createElement("div");
-  card.className = "af-usage-card";
-
-  let body = "";
-
-  if (!monthly) {
-    body = `
-      <div class="af-usage-cell full">
-        <div class="af-uc-label">Usage</div>
-        <div class="af-uc-value" style="font-size:14px;color:#bbb;">Unavailable</div>
-        <div class="af-uc-sub">Could not reach server</div>
-      </div>`;
-  } else {
-    // ── Tokens remaining ─────────────────────────────────────────────
-    const limited = monthly.tokenLimitMonthly > 0;
-    const left    = monthly.tokensLeft;
-    const used    = monthly.tokensUsed || 0;
-
-    let tokenLine, tokenSub;
-    if (limited) {
-      const pct  = Math.min(100, Math.round((used / monthly.tokenLimitMonthly) * 100));
-      const bar  = buildBar(pct);
-      tokenLine  = fmtTok(left) + " tokens left";
-      tokenSub   = `${fmtTok(used)} of ${fmtTok(monthly.tokenLimitMonthly)} used &nbsp;${bar}&nbsp; ${pct}%`;
-    } else {
-      tokenLine = fmtTok(used) + " tokens used";
-      tokenSub  = "No limit set — contact your admin";
-    }
-
-    // ── Recharge date ────────────────────────────────────────────────
-    let rechargeText = "—";
-    if (monthly.rechargedOn) {
-      const d = new Date(monthly.rechargedOn);
-      rechargeText = d.toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" });
-    }
-
-    // ── Naira charge ─────────────────────────────────────────────────
-    const ngnLine = monthly.chargeNgn > 0
-      ? `₦${monthly.chargeNgn.toLocaleString()} charged this month`
-      : "No charges yet this month";
-
-    body = `
-      <div class="af-usage-cell full">
-        <div class="af-uc-label">🔋 Tokens remaining</div>
-        <div class="af-uc-value">${tokenLine}</div>
-        <div class="af-uc-sub">${tokenSub}</div>
-      </div>
-      <div class="af-usage-cell full" style="border-top:1px solid #f0f0f0;">
-        <div class="af-uc-label">📅 Recharged on</div>
-        <div class="af-uc-value" style="font-size:15px;">${rechargeText}</div>
-        <div class="af-uc-sub">${ngnLine}</div>
-      </div>`;
-  }
-
-  card.innerHTML = `
-    <div class="af-usage-header">🔋 Your Balance</div>
-    <div class="af-usage-grid">${body}</div>
-    <div class="af-usage-footer">Resets on the 1st of every month &nbsp;·&nbsp; /usage to refresh</div>
-  `;
-  msgs.appendChild(card);
-  requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
-}
-
-      // Attempt to fetch monthly totals from backend; fall back to session-only if unavailable
-      fetchWithRetry(BACKEND_URL + "/api/agent/billing", {
-        headers: { "x-api-key": API_KEY }
-      }, { timeout: 8000, retries: 1 })
-      .then(r => r.json())
-      .then(d => renderUsageCard(d.success ? d.current : null))
-      .catch(() => renderUsageCard(null));
-
-      return;
-    }
-    // -----------------------------------------------------------
 
     if (!text && attachments.length === 0) return;
     const msg = text || (attachments.length > 0 ? "I've attached " + attachments.length + " file(s). Please review." : "");
@@ -2108,10 +2621,24 @@ window.afDownloadFile = function(filename) {
     const dot   = document.getElementById("af-status-dot");
     const label = document.getElementById("af-status-label");
     if (!dot || !label) return;
+    // bot-offline overrides network status visually
+    if (!botActive) {
+      dot.className     = "af-dot bot-offline";
+      label.textContent = "Offline";
+      return;
+    }
     dot.className   = "af-dot" + (status !== "ok" ? " " + status : "");
     label.textContent = status === "offline" ? "Offline"
                       : status === "slow"    ? "Slow"
                       : "Live";
+  }
+
+  // ── Show / hide bot-offline banner ───────────────────
+  function setBotOfflineBanner(show) {
+    const banner = document.getElementById("af-bot-offline-banner");
+    if (!banner) return;
+    banner.className = show ? "visible" : "";
+    banner.style.display = show ? "flex" : "none";
   }
 
   // ── Show / hide the network warning banner ────────────
@@ -2121,7 +2648,7 @@ window.afDownloadFile = function(filename) {
     const msg    = document.getElementById("af-nb-msg");
     if (!banner) return;
     banner.className = "visible " + level;
-    icon.textContent = level === "offline" ? "🔴" : "🟡";
+    icon.innerHTML = level === "offline" ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
     msg.textContent  = message;
     banner.style.display = "flex";
   }
@@ -2164,12 +2691,12 @@ window.afDownloadFile = function(filename) {
   // ── Wire up browser online / offline events ───────────
   window.addEventListener("online",  () => {
     updateNetworkStatus();
-    addMsg("agent", "✅ Connection restored.", false);
+    addMsg("agent", "Connection restored.", false);
     drainOfflineQueue();
   });
   window.addEventListener("offline", () => {
     updateNetworkStatus();
-    addMsg("warning", "🔴 You've gone offline. Your next message will be queued.", false);
+    addMsg("warning", "You've gone offline. Your next message will be queued.", false);
   });
 
   // Also react to connection-quality changes (Chrome/Android)
@@ -2192,6 +2719,20 @@ window.afDownloadFile = function(filename) {
   // ── Init ──────────────────────────────────────────────
   async function init() {
     try {
+      // ── Auth gate — check for stored JWT first ─────────
+      const stored = loadAuth();
+      if (stored?.token && !isTokenExpired(stored.token)) {
+        widgetToken = stored.token;
+        widgetUser  = stored.user;
+        widgetOrg   = stored.org;
+        setUserChip(stored.user);
+        hideAuthScreen();
+      } else {
+        clearAuth();
+        showAuthScreen("login");
+        return;   // init() will be called again by onAuthSuccess()
+      }
+
       // ── One-time stale cache bust ──────────────────────
       // If any previously-crawled pages were stored with 0 buttons + 0 inputs
       // (i.e., the old fetch+DOMParser approach produced empty data), wipe those
@@ -2213,7 +2754,7 @@ window.afDownloadFile = function(filename) {
         } catch {}
       }());
       const res  = await fetchWithRetry(BACKEND_URL + "/api/agent/status", {
-        headers: { "x-api-key": API_KEY, "ngrok-skip-browser-warning": "true" }
+        headers: { ...authHeaders(), "ngrok-skip-browser-warning": "true" }
       }, { timeout: adaptiveTimeout(10000), retries: 3, backoff: 2000 });
       const data = await res.json();
       if (!data.success) {
@@ -2223,6 +2764,12 @@ window.afDownloadFile = function(filename) {
       }
       clientInfo = data.client;
       document.getElementById("af-client-name").textContent = clientInfo.name;
+
+      // ── Bot live/offline state ────────────────────────
+      botActive = data.client.botActive !== false;
+      updateStatusDot(networkStatus);
+      setBotOfflineBanner(!botActive);
+      setInputLocked(!botActive);
 
       const session = loadSession();
       if (session?.history?.length > 0) {
@@ -2236,13 +2783,14 @@ window.afDownloadFile = function(filename) {
       } else {
         clearMessages();
         addMsg("agent",
-          `👋 Hello! I'm your AI agent for <strong>${clientInfo.name}</strong>.<br><br>` +
-          `I can see your page and understand natural language. You can also <strong>attach files or images</strong> using the 📎 button, or <strong>record a voice note</strong> with the 🎤 button — you'll see a preview to edit before it sends.<br><br>` +
+          `Hello! I'm your AI assistant for <strong>${clientInfo.name}</strong>.<br><br>` +
+          `I can see your page and understand natural language. You can also <strong>attach files or images</strong> using the attachment button, or <strong>record a voice note</strong> with the mic button — you'll see a preview to edit before it sends.<br><br>` +
           `<em>What would you like me to handle?</em>`
         );
       }
 
-      setInputLocked(false);
+      // Only unlock input if bot is active
+      if (botActive !== false) setInputLocked(false);
 
       // ── Resume a cross-page task if one was in flight ──
       const continuation = loadPendingContinuation();
@@ -2251,7 +2799,7 @@ window.afDownloadFile = function(filename) {
         // Give the new page's JS a full moment to finish rendering before we scan it
         await sleep(1400);
         addMsg("agent",
-          `⚡ Resuming task on <strong>${escHtml(document.title)}</strong>…`
+          `Resuming task on <strong>${escHtml(document.title)}</strong>…`
         );
         await sleep(300);
         pendingPlan = { originalCommand: continuation.originalCommand, taskType: continuation.taskType };
@@ -2271,7 +2819,7 @@ window.afDownloadFile = function(filename) {
     } catch (err) {
       clearMessages();
       if (err.name === "AbortError" || !navigator.onLine) {
-        addMsg("error", "🔴 Could not connect to AgentFlow — please check your internet connection and try again.", false);
+        addMsg("error", "Could not connect — please check your internet connection and try again.", false);
         updateNetworkStatus();
       } else {
         addMsg("error", "⚠️ Could not connect to AgentFlow backend.", false);
@@ -2300,7 +2848,7 @@ window.afDownloadFile = function(filename) {
       `Now on a new page — please continue with: ${remainingPart}.`;
 
     setInputLocked(true);
-    const thinking = addMsg("thinking", "🧠 Replanning for this page…", false);
+    const thinking = addMsg("thinking", "Replanning for this page…", false);
 
     try {
       const pageContext    = scanPage();
@@ -2312,7 +2860,7 @@ window.afDownloadFile = function(filename) {
       const res = await fetchWithRetry(BACKEND_URL + "/api/agent/message", {
         method: "POST",
         headers: {
-          "x-api-key": API_KEY,
+          ...authHeaders(),
           "Content-Type": "application/json",
           "ngrok-skip-browser-warning": "true"
         },
@@ -2418,7 +2966,7 @@ window.afDownloadFile = function(filename) {
 
       await fetchWithTimeout(BACKEND_URL + "/api/agent/learn-page", {
         method:  "POST",
-        headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
+        headers: { ...authHeaders({"Content-Type":"application/json"}) },
         body:    JSON.stringify({
           pageData,
           url,
@@ -2603,7 +3151,7 @@ window.afDownloadFile = function(filename) {
 
           await fetchWithTimeout(BACKEND_URL + "/api/agent/learn-page", {
             method:  "POST",
-            headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
+            headers: { ...authHeaders({"Content-Type":"application/json"}) },
             body:    JSON.stringify({ pageData, url, pageText })
           }, 15000);
 
@@ -2625,6 +3173,46 @@ window.afDownloadFile = function(filename) {
       // Completely silent — never disrupts the user
     }
   }
+
+  // ── Bot status poll (every 30 s) ──────────────────────
+  // Detects when an admin toggles the bot on/off without a page reload.
+  // Uses the same /api/agent/status endpoint as init — lightweight GET, no AI call.
+  async function pollBotStatus() {
+    try {
+      const res  = await fetch(BACKEND_URL + "/api/agent/status", {
+        headers: { ...authHeaders(), "ngrok-skip-browser-warning": "true" },
+        signal:  AbortSignal.timeout(8000)
+      });
+      const data = await res.json();
+      const nowActive = data.success && data.client?.botActive !== false;
+      if (nowActive === botActive) return;   // no change — nothing to do
+
+      botActive = nowActive;
+      updateStatusDot(networkStatus);
+      setBotOfflineBanner(!botActive);
+
+      if (!botActive) {
+        // Bot was just turned OFF
+        setInputLocked(true);
+        addMsg("agent",
+          `<strong>Assistant offline</strong><br>` +
+          `The assistant has been temporarily disabled. Please try again later.`
+        );
+      } else {
+        // Bot was just turned back ON
+        setInputLocked(false);
+        addMsg("agent",
+          `<strong>Assistant back online</strong><br>` +
+          `The assistant is available again. How can I help?`
+        );
+      }
+    } catch {
+      // Silent — network blips don't change botActive state
+    }
+  }
+
+  // Start polling 30 s after init so it doesn't compete with startup requests
+  setTimeout(() => setInterval(pollBotStatus, 30000), 30000);
 
   init();
 }());
