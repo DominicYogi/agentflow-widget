@@ -336,6 +336,7 @@
     .af-um-item:hover { background: #f5f5f5; }
     .af-um-item.danger { color: #e53935; }
     .af-um-sep { border-top: 1px solid #f0f0f0; margin: 2px 0; }
+  #af-messages {
   flex: 1; 
   padding: 14px 14px 20px; 
   overflow-y: scroll; /* Force the scrollbar area to exist */
