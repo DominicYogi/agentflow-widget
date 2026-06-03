@@ -1165,7 +1165,10 @@
         headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
         body:   JSON.stringify({ apiKey: API_KEY, email, password })
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); }
+      catch { throw new Error(res.status === 404 ? "Auth routes not found on server — please redeploy the backend with the latest code." : `Server error (${res.status}). Please try again.`); }
       if (!data.success) throw new Error(data.error || "Login failed.");
       onAuthSuccess(data.token, data.user, data.org);
     } catch (err) {
@@ -1198,7 +1201,10 @@
         headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
         body:   JSON.stringify({ apiKey: API_KEY, firstName, lastName, email, password })
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); }
+      catch { throw new Error(res.status === 404 ? "Auth routes not found — please redeploy the backend." : `Server error (${res.status}).`); }
       if (!data.success) throw new Error(data.error || "Signup failed.");
       showAuthSuccess("signup");
       setTimeout(() => onAuthSuccess(data.token, data.user, data.org), 1200);
@@ -1224,7 +1230,10 @@
         headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
         body:   JSON.stringify({ apiKey: API_KEY, email })
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); }
+      catch { throw new Error(res.status === 404 ? "Auth routes not found — please redeploy the backend." : `Server error (${res.status}).`); }
       if (data.success) {
         showAuthSuccess("forgot");
         btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> Email sent`;
