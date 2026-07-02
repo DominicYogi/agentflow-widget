@@ -217,6 +217,59 @@
     #af-explain-page-btn:hover { opacity: 1; }
     #af-explain-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
+    #af-history-btn {
+      background: none; border: none; color: white; opacity: 0.85; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 2px;
+    }
+    #af-history-btn:hover { opacity: 1; }
+
+    /* ── Conversation history panel (slides over the message list) ── */
+    #af-history-panel {
+      position: absolute; inset: 0; background: #fff; z-index: 40;
+      display: none; flex-direction: column;
+    }
+    #af-history-panel.open { display: flex; }
+    #af-history-head {
+      display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+      border-bottom: 1px solid #eee;
+    }
+    #af-history-search {
+      flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 7px 10px; font-size: 13px; outline: none;
+    }
+    #af-history-close, #af-history-new {
+      background: none; border: none; cursor: pointer; font-size: 13px; color: #234; padding: 4px 6px;
+    }
+    #af-history-list { flex: 1; overflow-y: auto; padding: 6px 10px; }
+    .af-hist-item {
+      display: flex; align-items: center; gap: 8px; padding: 10px 8px; border-radius: 8px;
+      cursor: pointer; border-bottom: 1px solid #f2f2f2;
+    }
+    .af-hist-item:hover { background: #f7f9fc; }
+    .af-hist-title { flex: 1; font-size: 13px; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .af-hist-time  { font-size: 11px; color: #999; white-space: nowrap; }
+    .af-hist-btn   { background: none; border: none; cursor: pointer; font-size: 13px; opacity: 0.6; padding: 2px 4px; }
+    .af-hist-btn:hover { opacity: 1; }
+    .af-hist-empty { padding: 30px 16px; text-align: center; color: #999; font-size: 13px; }
+
+    /* ── Guided Walkthrough ── */
+    .af-wt-overview { margin: 8px 0 0 18px; padding: 0; font-size: 13px; }
+    .af-wt-overview li { margin-bottom: 3px; }
+    #af-wt-banner {
+      position: absolute; left: 12px; right: 12px; bottom: 84px; z-index: 45;
+      background: #1a1a2e; color: #fff; border-radius: 12px; padding: 12px 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    }
+    .af-wt-progress { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .af-wt-instruction { font-size: 13.5px; line-height: 1.4; margin-bottom: 10px; }
+    .af-wt-controls { display: flex; justify-content: flex-end; gap: 8px; }
+    .af-wt-btn { border: none; border-radius: 8px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; }
+    .af-wt-exit { background: rgba(255,255,255,0.12); color: #fff; }
+    .af-wt-exit:hover { background: rgba(255,255,255,0.2); }
+    .af-wt-next { background: #f57f17; color: #fff; font-weight: 600; }
+    .af-wt-next:hover { background: #e07000; }
+    .af-wt-done { font-size: 13.5px; text-align: center; padding: 4px 0; }
+
     #af-header {
       background: ${theme.primary}; color: white; padding: 14px 16px;
       display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
@@ -1030,6 +1083,12 @@
             <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"></circle>
           </svg>
         </button>
+        <button id="af-history-btn" type="button" title="Conversation history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;">
+            <circle cx="12" cy="12" r="9"></circle>
+            <polyline points="12 7 12 12 16 14"></polyline>
+          </svg>
+        </button>
         <!-- User chip — shown after login -->
         <div id="af-user-chip">
           <div class="af-uc-avatar" id="af-uc-initials"></div>
@@ -1102,6 +1161,16 @@
           Clear workspace files
         </button>
       </div>
+    </div>
+
+    <!-- Conversation History panel (§23) — overlays the chat, toggled by the header clock icon -->
+    <div id="af-history-panel">
+      <div id="af-history-head">
+        <input id="af-history-search" type="text" placeholder="Search conversations…" autocomplete="off" />
+        <button id="af-history-new" title="Start a new conversation">+ New</button>
+        <button id="af-history-close" title="Close">✕</button>
+      </div>
+      <div id="af-history-list"></div>
     </div>
 
     <div id="af-messages">
@@ -1412,6 +1481,79 @@
     function fieldHelpEscHandler(e) { if (e.key === "Escape" && fieldHelpActive) toggleFieldHelp(); }
   })();
 
+  // ── Conversation History panel wiring (§23) ────────────
+  (function () {
+    const historyBtn   = document.getElementById("af-history-btn");
+    const historyPanel = document.getElementById("af-history-panel");
+    const historyList  = document.getElementById("af-history-list");
+    const searchInput  = document.getElementById("af-history-search");
+    const closeBtn     = document.getElementById("af-history-close");
+    const newBtn       = document.getElementById("af-history-new");
+    if (!historyBtn || !historyPanel) return;
+
+    function fmtTime(ts) {
+      const d = new Date(ts);
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      return sameDay
+        ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : d.toLocaleDateString([], { month: "short", day: "numeric" });
+    }
+
+    function renderHistoryList(filterText) {
+      const q = (filterText || "").toLowerCase().trim();
+      const activeId = sessionStorage.getItem(CUR_CONV_ID_KEY);
+      let items = getArchive();
+      if (q) {
+        items = items.filter(c =>
+          c.title.toLowerCase().includes(q) ||
+          c.messages.some(m => m.html.replace(/<[^>]+>/g, "").toLowerCase().includes(q))
+        );
+      }
+      if (!items.length) {
+        historyList.innerHTML = `<div class="af-hist-empty">No conversations ${q ? "match that search" : "yet"}.</div>`;
+        return;
+      }
+      historyList.innerHTML = items.map(c => `
+        <div class="af-hist-item" data-id="${c.id}" style="${c.id === activeId ? "background:#f0f4ff;" : ""}">
+          <span class="af-hist-btn af-hist-pin" data-id="${c.id}" title="${c.pinned ? "Unpin" : "Pin"}">${c.pinned ? "📌" : "📍"}</span>
+          <span class="af-hist-title">${escHtml(c.title)}</span>
+          <span class="af-hist-time">${fmtTime(c.updatedAt)}</span>
+          <span class="af-hist-btn af-hist-share" data-id="${c.id}" title="Copy transcript">⇪</span>
+          <span class="af-hist-btn af-hist-del" data-id="${c.id}" title="Delete">🗑️</span>
+        </div>`).join("");
+    }
+
+    function openHistory() { renderHistoryList(searchInput.value); historyPanel.classList.add("open"); }
+    function closeHistory() { historyPanel.classList.remove("open"); }
+
+    historyBtn.addEventListener("click", (e) => { e.stopPropagation(); openHistory(); });
+    closeBtn.addEventListener("click", closeHistory);
+    newBtn.addEventListener("click", () => { startNewConversation(); closeHistory(); });
+    searchInput.addEventListener("input", () => renderHistoryList(searchInput.value));
+
+    historyList.addEventListener("click", (e) => {
+      const id = e.target.getAttribute("data-id");
+      if (!id) return;
+      if (e.target.classList.contains("af-hist-pin")) {
+        togglePinConversation(id); renderHistoryList(searchInput.value); return;
+      }
+      if (e.target.classList.contains("af-hist-del")) {
+        deleteConversation(id); renderHistoryList(searchInput.value); return;
+      }
+      if (e.target.classList.contains("af-hist-share")) {
+        shareConversation(id).then(ok => {
+          e.target.textContent = ok ? "✓" : "⚠";
+          setTimeout(() => { e.target.textContent = "⇪"; }, 1200);
+        });
+        return;
+      }
+      // Row click (not on a sub-button) → resume that conversation
+      resumeConversation(id);
+      closeHistory();
+    });
+  })();
+
   // ════════════════════════════════════════════════════════
   // ── AUTH — JWT storage + screen management ────────────
   // ════════════════════════════════════════════════════════
@@ -1635,6 +1777,7 @@
         history: conversationHistory.slice(-40), clientInfo
       }));
     } catch (e) {}
+    archiveCurrentSession();
   }
   function loadSession() {
     try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; }
@@ -1642,6 +1785,87 @@
   function clearSession() {
     try { sessionStorage.removeItem(SESSION_KEY); } catch {}
     conversationHistory = [];
+  }
+
+  // ── Conversation History archive (§23) ────────────────
+  // Cross-session, cross-reload archive of past conversations stored in
+  // localStorage: resumable, searchable, pinnable. Independent of the
+  // sessionStorage "current tab" snapshot above.
+  const ARCHIVE_KEY = "af_archive_" + (API_KEY || "default");
+  const CUR_CONV_ID_KEY = "af_cur_conv_" + (API_KEY || "default");
+
+  function getArchive() {
+    try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY) || "[]"); } catch { return []; }
+  }
+  function setArchive(list) {
+    try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(list.slice(0, 40))); } catch {}
+  }
+  function currentConvId() {
+    let id = sessionStorage.getItem(CUR_CONV_ID_KEY);
+    if (!id) {
+      id = "conv_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+      sessionStorage.setItem(CUR_CONV_ID_KEY, id);
+    }
+    return id;
+  }
+  function conversationTitle(history) {
+    const firstUser = history.find(m => m.type === "user");
+    if (!firstUser) return "New conversation";
+    return firstUser.html.replace(/<[^>]+>/g, "").trim().slice(0, 60) || "New conversation";
+  }
+  // Upserts the current in-memory conversation into the archive. Cheap and
+  // called on every saveSession() so the archive always reflects live state.
+  function archiveCurrentSession() {
+    if (!conversationHistory.length) return;
+    const id = currentConvId();
+    const archive = getArchive();
+    const idx = archive.findIndex(c => c.id === id);
+    const entry = {
+      id,
+      title: conversationTitle(conversationHistory),
+      updatedAt: Date.now(),
+      pinned: idx !== -1 ? !!archive[idx].pinned : false,
+      messages: conversationHistory.slice(-60)
+    };
+    if (idx !== -1) archive[idx] = entry; else archive.unshift(entry);
+    archive.sort((a, b) => (b.pinned - a.pinned) || (b.updatedAt - a.updatedAt));
+    setArchive(archive);
+  }
+  function startNewConversation() {
+    sessionStorage.removeItem(CUR_CONV_ID_KEY);
+    clearSession();
+    clearMessages();
+  }
+  function resumeConversation(id) {
+    const entry = getArchive().find(c => c.id === id);
+    if (!entry) return;
+    sessionStorage.setItem(CUR_CONV_ID_KEY, id);
+    conversationHistory = entry.messages.slice();
+    saveSession();
+    restoreMessages();
+  }
+  function togglePinConversation(id) {
+    const archive = getArchive();
+    const entry = archive.find(c => c.id === id);
+    if (!entry) return;
+    entry.pinned = !entry.pinned;
+    archive.sort((a, b) => (b.pinned - a.pinned) || (b.updatedAt - a.updatedAt));
+    setArchive(archive);
+  }
+  function deleteConversation(id) {
+    setArchive(getArchive().filter(c => c.id !== id));
+  }
+  async function shareConversation(id) {
+    const entry = getArchive().find(c => c.id === id);
+    if (!entry) return false;
+    const text = entry.messages
+      .filter(m => m.type === "user" || m.type === "agent")
+      .map(m => (m.type === "user" ? "You: " : "Assistant: ") + m.html.replace(/<[^>]+>/g, "").trim())
+      .join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch { return false; }
   }
 
   // ── Message helpers ───────────────────────────────────
@@ -2538,6 +2762,7 @@ window.afDownloadFile = function(filename) {
       `<button class="af-fb-btn" data-vote="up" title="Helpful">👍</button>` +
       `<button class="af-fb-btn" data-vote="down" title="Not helpful">👎</button>` +
       `<button class="af-fb-btn" data-vote="report" title="Report incorrect">🚩</button>` +
+      `<button class="af-fb-btn af-copy-btn" title="Copy response">⧉</button>` +
       `<span class="af-fb-thanks" style="display:none;">Thanks for the feedback</span>` +
       `</div>`;
     if (Array.isArray(suggestions) && suggestions.length) {
@@ -2555,7 +2780,19 @@ window.afDownloadFile = function(filename) {
   // Event delegation for feedback buttons + suggestion chips, since replies
   // are added dynamically via innerHTML.
   document.addEventListener("click", function (e) {
-    const fbBtn = e.target.closest(".af-fb-btn");
+    const copyBtn = e.target.closest(".af-copy-btn");
+    if (copyBtn) {
+      const row = copyBtn.closest(".af-feedback-row");
+      const text = row?.getAttribute("data-reply-text") || "";
+      navigator.clipboard?.writeText(text).then(() => {
+        const orig = copyBtn.textContent;
+        copyBtn.textContent = "✓";
+        setTimeout(() => { copyBtn.textContent = orig; }, 1200);
+      }).catch(() => {});
+      return;
+    }
+
+    const fbBtn = e.target.closest(".af-fb-btn[data-vote]");
     if (fbBtn) {
       const row = fbBtn.closest(".af-feedback-row");
       if (!row || row.classList.contains("af-fb-done")) return;
@@ -2587,6 +2824,113 @@ window.afDownloadFile = function(filename) {
       }
     }
   });
+
+  // ── Guided Walkthrough Mode (§4) ──────────────────────
+  // Renders an intro card, then a persistent step banner. Each step
+  // optionally highlights a matching element on the HOST page (by visible
+  // text, via elementHint) and auto-advances when the user clicks it;
+  // otherwise the user advances manually with "Next". State is kept in
+  // sessionStorage so a walkthrough survives a page navigation.
+  const WALKTHROUGH_KEY = "af_walkthrough_" + (API_KEY || "default");
+
+  function findByHint(hint) {
+    if (!hint) return null;
+    const needle = hint.toLowerCase().trim();
+    const candidates = Array.from(document.querySelectorAll(
+      "button, a, [role='button'], input, select, textarea, label"
+    )).filter(el => !el.closest("#af-panel") && !el.closest("#af-cmdk-overlay"));
+    return candidates.find(el => {
+      const txt = (el.textContent || el.value || el.placeholder || el.getAttribute("aria-label") || "").toLowerCase().trim();
+      return txt && txt.includes(needle);
+    }) || null;
+  }
+
+  function highlightWalkthroughTarget(hint, onAdvance) {
+    const el = findByHint(hint);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const origOutline = el.style.outline, origBg = el.style.background;
+    el.style.outline = "3px solid #f57f17";
+    el.style.outlineOffset = "2px";
+    el.style.background = "#fff8e1";
+    const cleanup = () => { el.style.outline = origOutline; el.style.background = origBg; };
+    const handler = () => { cleanup(); el.removeEventListener("click", handler); onAdvance(); };
+    el.addEventListener("click", handler, { once: true });
+    // Stash cleanup so we can remove the highlight if the user clicks "Next" instead
+    el.__afWtCleanup = () => { cleanup(); el.removeEventListener("click", handler); };
+    return el;
+  }
+
+  let _wtActiveEl = null;
+
+  function renderWalkthroughStep(steps, idx) {
+    if (_wtActiveEl?.__afWtCleanup) _wtActiveEl.__afWtCleanup();
+    _wtActiveEl = null;
+
+    const banner = document.getElementById("af-wt-banner");
+    if (!banner) return;
+    if (idx >= steps.length) {
+      banner.innerHTML = `<div class="af-wt-done">✅ Walkthrough complete!</div>`;
+      setTimeout(() => { banner.remove(); sessionStorage.removeItem(WALKTHROUGH_KEY); }, 1800);
+      return;
+    }
+    const step = steps[idx];
+    sessionStorage.setItem(WALKTHROUGH_KEY, JSON.stringify({ steps, idx }));
+
+    banner.innerHTML = `
+      <div class="af-wt-progress">Step ${idx + 1} of ${steps.length}</div>
+      <div class="af-wt-instruction">${escHtml(step.instruction || step.description || "")}</div>
+      <div class="af-wt-controls">
+        <button class="af-wt-btn af-wt-exit">Exit</button>
+        <button class="af-wt-btn af-wt-next">${idx === steps.length - 1 ? "Finish" : "Next →"}</button>
+      </div>`;
+
+    const advance = () => renderWalkthroughStep(steps, idx + 1);
+    if (step.elementHint) {
+      _wtActiveEl = highlightWalkthroughTarget(step.elementHint, advance);
+    }
+    banner.querySelector(".af-wt-next").addEventListener("click", advance);
+    banner.querySelector(".af-wt-exit").addEventListener("click", () => {
+      if (_wtActiveEl?.__afWtCleanup) _wtActiveEl.__afWtCleanup();
+      banner.remove();
+      sessionStorage.removeItem(WALKTHROUGH_KEY);
+    });
+  }
+
+  function showWalkthroughCard(reply, steps) {
+    if (!Array.isArray(steps) || !steps.length) {
+      addMsg("agent", renderAgentReply(reply || "I don't have clear steps for that yet.", null));
+      return;
+    }
+    addMsg("agent", renderAgentReply(
+      (reply || "Here's a step-by-step walkthrough:") +
+      `<ol class="af-wt-overview">` + steps.map(s => `<li>${escHtml(s.description || s.instruction || "")}</li>`).join("") + `</ol>`,
+      null
+    ));
+    let banner = document.getElementById("af-wt-banner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "af-wt-banner";
+      document.getElementById("af-panel").appendChild(banner);
+    }
+    renderWalkthroughStep(steps, 0);
+  }
+
+  // Resume an in-progress walkthrough after a page reload/navigation
+  (function resumeWalkthrough() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(WALKTHROUGH_KEY) || "null");
+      if (saved?.steps?.length) {
+        let banner = document.getElementById("af-wt-banner");
+        if (!banner) {
+          banner = document.createElement("div");
+          banner.id = "af-wt-banner";
+          document.getElementById("af-panel")?.appendChild(banner);
+        }
+        renderWalkthroughStep(saved.steps, saved.idx || 0);
+      }
+    } catch {}
+  })();
 
   function showConfirmCard(reply, plan) {
     pendingPlan = plan;
@@ -2890,6 +3234,8 @@ window.afDownloadFile = function(filename) {
       addMsg("agent", renderAgentReply(replyText || "Done.", response.suggestions, message));
     } else if (response.type === "file_select") {
       showFileSelectCard(response.reply, response.files || []);
+    } else if (response.type === "walkthrough") {
+      showWalkthroughCard(response.reply, response.steps || []);
     } else if (response.type === "task") {
       if (response.plan?.actions?.length > 0) {
         response.plan.originalCommand = message;
