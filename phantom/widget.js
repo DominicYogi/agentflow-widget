@@ -4,6 +4,10 @@
   const BACKEND_URL = "https://agentflow-backend-krdb.onrender.com";
   const API_KEY  = document.currentScript?.getAttribute("data-api-key") || "af_live_medicare001";
   const THEME    = document.currentScript?.getAttribute("data-theme")   || "blue";
+  // Optional: host page can declare the logged-in user's ERP role, e.g.
+  // <script ... data-user-role="Accounts Clerk"></script>. Sent with every
+  // message so the AI can avoid suggesting actions outside that role.
+  const USER_ROLE = document.currentScript?.getAttribute("data-user-role") || "";
 
   const THEMES = {
     blue:  { primary: "#0052cc", light: "#e8f0fe", accent: "#003d99" },
@@ -447,6 +451,53 @@
     .af-msg.agent ol         { margin: 6px 0 6px 16px; padding: 0; }
     .af-msg.agent li         { margin-bottom: 4px; line-height: 1.5; }
     .af-msg.agent br         { display: block; content: ""; margin-top: 4px; }
+
+    /* ── Feedback row (👍/👎/report) ── */
+    .af-feedback-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+    .af-fb-btn {
+      background: none; border: none; cursor: pointer; font-size: 13px;
+      opacity: 0.5; padding: 2px 4px; border-radius: 4px; line-height: 1;
+    }
+    .af-fb-btn:hover { opacity: 1; background: rgba(0,0,0,0.05); }
+    .af-fb-btn:disabled { cursor: default; }
+    .af-feedback-row.af-fb-done .af-fb-btn:not(:disabled) { opacity: 0.3; }
+    .af-fb-thanks { font-size: 11px; color: #888; }
+
+    /* ── Suggested follow-up chips ── */
+    .af-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .af-suggestion-chip {
+      border: 1px solid #d7dee8; background: #f5f8fc; color: #234; cursor: pointer;
+      font-size: 12px; padding: 5px 10px; border-radius: 14px; line-height: 1.2;
+    }
+    .af-suggestion-chip:hover { background: #e8f0fe; border-color: #b9cdf0; }
+
+    /* ── Command Palette (Ctrl+K) ── */
+    #af-cmdk-overlay {
+      position: fixed; inset: 0; background: rgba(20,24,32,0.45); z-index: 10050;
+      display: none; align-items: flex-start; justify-content: center; padding-top: 12vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    }
+    #af-cmdk-overlay.open { display: flex; }
+    #af-cmdk-box {
+      width: 480px; max-width: 90vw; background: #fff; border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;
+    }
+    #af-cmdk-input {
+      width: 100%; box-sizing: border-box; border: none; outline: none;
+      padding: 16px 18px; font-size: 15px; border-bottom: 1px solid #eee;
+    }
+    #af-cmdk-list { max-height: 320px; overflow-y: auto; padding: 6px; }
+    .af-cmdk-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; color: #222; }
+    .af-cmdk-item.active, .af-cmdk-item:hover { background: #f0f4ff; }
+    .af-cmdk-empty { padding: 14px 12px; color: #999; font-size: 13px; }
+
+    /* ── Field Help mode badge ── */
+    #af-field-help-badge {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: #1a1a2e; color: #fff; font-size: 12px; padding: 8px 14px;
+      border-radius: 20px; z-index: 10060; box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    }
 
     /* ── Attachment preview inside messages ── */
     .af-msg-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -1222,6 +1273,143 @@
       if (!panel.classList.contains("open")) openPanel();
       sendMessage("Explain this page");
     });
+  })();
+
+  // ── AI Command Palette (Ctrl+K / Cmd+K) ────────────────
+  // Universal quick-command interface. Ctrl/Cmd+K opens it from anywhere on
+  // the host page; typing filters canned commands (nav shortcuts, creation
+  // shortcuts, Learning Center lessons, Explain This Page/Error); Enter runs
+  // the top match through the normal sendMessage() pipeline.
+  (function () {
+    const COMMANDS = [
+      { label: "Create customer",        run: "Create customer" },
+      { label: "Create supplier",        run: "Create supplier" },
+      { label: "Open inventory",         run: "Open inventory" },
+      { label: "Generate report",        run: "Generate report" },
+      { label: "Go to payroll",          run: "Go to payroll" },
+      { label: "Show pending invoices",  run: "Show pending invoices" },
+      { label: "Explain this page",      run: "Explain this page" },
+      { label: "Explain this error",     run: "Explain this error" },
+      { label: "Teach me Sales",         run: "Teach me Sales" },
+      { label: "Teach me Inventory",     run: "Teach me Inventory" },
+      { label: "Teach me Purchasing",    run: "Teach me Purchasing" },
+      { label: "Teach me Finance",       run: "Teach me Finance" },
+      { label: "Toggle Field Help mode", action: "field-help" }
+    ];
+
+    const overlay = document.createElement("div");
+    overlay.id = "af-cmdk-overlay";
+    overlay.innerHTML = `
+      <div id="af-cmdk-box">
+        <input id="af-cmdk-input" type="text" placeholder="Type a command… (e.g. Create customer)" autocomplete="off" />
+        <div id="af-cmdk-list"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const box   = overlay.querySelector("#af-cmdk-box");
+    const input = overlay.querySelector("#af-cmdk-input");
+    const list  = overlay.querySelector("#af-cmdk-list");
+    let activeIdx = 0;
+    let filtered  = COMMANDS;
+
+    function renderList() {
+      list.innerHTML = filtered.map((c, i) =>
+        `<div class="af-cmdk-item${i === activeIdx ? " active" : ""}" data-idx="${i}">${escHtml(c.label)}</div>`
+      ).join("") || `<div class="af-cmdk-empty">No matching commands</div>`;
+    }
+
+    function openPalette() {
+      overlay.classList.add("open");
+      input.value = "";
+      filtered = COMMANDS;
+      activeIdx = 0;
+      renderList();
+      setTimeout(() => input.focus(), 10);
+    }
+    function closePalette() { overlay.classList.remove("open"); }
+
+    function runCommand(cmd) {
+      if (!cmd) return;
+      closePalette();
+      if (cmd.action === "field-help") { toggleFieldHelp(); return; }
+      if (isProcessing || !botActive) return;
+      if (!panel.classList.contains("open")) openPanel();
+      sendMessage(cmd.run);
+    }
+
+    input.addEventListener("input", () => {
+      const q = input.value.toLowerCase().trim();
+      filtered = q ? COMMANDS.filter(c => c.label.toLowerCase().includes(q)) : COMMANDS;
+      activeIdx = 0;
+      renderList();
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, filtered.length - 1); renderList(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); renderList(); }
+      else if (e.key === "Enter") { e.preventDefault(); runCommand(filtered[activeIdx]); }
+      else if (e.key === "Escape") { e.preventDefault(); closePalette(); }
+    });
+    list.addEventListener("click", (e) => {
+      const item = e.target.closest(".af-cmdk-item");
+      if (item) runCommand(filtered[+item.getAttribute("data-idx")]);
+    });
+    overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closePalette(); });
+
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        overlay.classList.contains("open") ? closePalette() : openPalette();
+      }
+    });
+
+    // ── Field Help mode (Section 6: Field Explanation) ──
+    // When active, clicking any field on the HOST page (not inside the
+    // widget) sends its label/type/value to the backend for a structured
+    // explanation instead of interacting with the field normally.
+    let fieldHelpActive = false;
+    let fieldHelpBadge = null;
+
+    function fieldMeta(el) {
+      const label =
+        el.closest("label")?.textContent?.trim() ||
+        document.querySelector(`label[for="${el.id}"]`)?.textContent?.trim() ||
+        el.getAttribute("aria-label") || el.placeholder || el.name || el.id || "(unlabeled field)";
+      const options = el.tagName === "SELECT"
+        ? Array.from(el.options).map(o => o.textContent.trim()).filter(Boolean).slice(0, 20).join(", ")
+        : "";
+      return `label="${label.replace(/"/g, "'")}" type="${el.type || el.tagName.toLowerCase()}" ` +
+             `currentValue="${(el.value || "").toString().slice(0, 100).replace(/"/g, "'")}"` +
+             (options ? ` options="${options.replace(/"/g, "'")}"` : "");
+    }
+
+    function fieldHelpClickHandler(e) {
+      const el = e.target.closest("input, select, textarea");
+      if (!el || el.closest("#af-panel") || el.closest("#af-cmdk-overlay")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (isProcessing || !botActive) return;
+      if (!panel.classList.contains("open")) openPanel();
+      sendMessage("[FIELD_EXPLAIN] " + fieldMeta(el));
+    }
+
+    function toggleFieldHelp() {
+      fieldHelpActive = !fieldHelpActive;
+      if (fieldHelpActive) {
+        document.addEventListener("click", fieldHelpClickHandler, true);
+        document.body.style.cursor = "help";
+        fieldHelpBadge = document.createElement("div");
+        fieldHelpBadge.id = "af-field-help-badge";
+        fieldHelpBadge.textContent = "Field Help: click any field · Esc to exit";
+        document.body.appendChild(fieldHelpBadge);
+        document.addEventListener("keydown", fieldHelpEscHandler);
+      } else {
+        document.removeEventListener("click", fieldHelpClickHandler, true);
+        document.body.style.cursor = "";
+        if (fieldHelpBadge) { fieldHelpBadge.remove(); fieldHelpBadge = null; }
+        document.removeEventListener("keydown", fieldHelpEscHandler);
+      }
+    }
+    function fieldHelpEscHandler(e) { if (e.key === "Escape" && fieldHelpActive) toggleFieldHelp(); }
   })();
 
   // ════════════════════════════════════════════════════════
@@ -2325,6 +2513,81 @@ window.afDownloadFile = function(filename) {
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   }
 
+  // ── Feedback system (👍 / 👎 / 🚩 report) ──────────────
+  // Attached to every agent reply. Fire-and-forget POST — never blocks or
+  // interrupts the chat if it fails.
+  let _feedbackSeq = 0;
+  async function sendFeedback(messageId, vote, replyText, userMessage, reportReason) {
+    try {
+      await fetch(BACKEND_URL + "/api/agent/feedback", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId, vote, replyText, userMessage, reportReason, device: deviceInfo })
+      });
+    } catch { /* best-effort — don't disrupt the conversation */ }
+  }
+
+  // Wraps an agent reply with feedback controls and optional follow-up
+  // suggestion chips (from response.suggestions). Returns the full HTML
+  // string ready to pass into addMsg("agent", html).
+  function renderAgentReply(replyText, suggestions, lastUserMessage) {
+    const safeText = replyText || "Done.";
+    const msgId = "af-msg-" + (++_feedbackSeq) + "-" + Date.now();
+    let html = `<div class="af-reply-body">${safeText}</div>`;
+    html += `<div class="af-feedback-row" data-msg-id="${msgId}">` +
+      `<button class="af-fb-btn" data-vote="up" title="Helpful">👍</button>` +
+      `<button class="af-fb-btn" data-vote="down" title="Not helpful">👎</button>` +
+      `<button class="af-fb-btn" data-vote="report" title="Report incorrect">🚩</button>` +
+      `<span class="af-fb-thanks" style="display:none;">Thanks for the feedback</span>` +
+      `</div>`;
+    if (Array.isArray(suggestions) && suggestions.length) {
+      html += `<div class="af-suggestions">` + suggestions.slice(0, 3).map(s =>
+        `<button class="af-suggestion-chip" data-suggestion="${escHtml(s)}">${escHtml(s)}</button>`
+      ).join("") + `</div>`;
+    }
+    // Stash raw text/user message on the row via data attrs for the report flow
+    return html.replace(
+      `data-msg-id="${msgId}"`,
+      `data-msg-id="${msgId}" data-reply-text="${escHtml(safeText.replace(/<[^>]+>/g, "").slice(0, 2000))}" data-user-message="${escHtml((lastUserMessage || "").slice(0, 500))}"`
+    );
+  }
+
+  // Event delegation for feedback buttons + suggestion chips, since replies
+  // are added dynamically via innerHTML.
+  document.addEventListener("click", function (e) {
+    const fbBtn = e.target.closest(".af-fb-btn");
+    if (fbBtn) {
+      const row = fbBtn.closest(".af-feedback-row");
+      if (!row || row.classList.contains("af-fb-done")) return;
+      const vote        = fbBtn.getAttribute("data-vote");
+      const msgId       = row.getAttribute("data-msg-id");
+      const replyText   = row.getAttribute("data-reply-text") || "";
+      const userMessage = row.getAttribute("data-user-message") || "";
+      if (vote === "report") {
+        const reason = window.prompt("What was wrong with this response? (optional)") || "";
+        sendFeedback(msgId, "report", replyText, userMessage, reason);
+      } else {
+        sendFeedback(msgId, vote, replyText, userMessage);
+      }
+      row.classList.add("af-fb-done");
+      row.querySelectorAll(".af-fb-btn").forEach(b => b.disabled = true);
+      if (vote !== "report") {
+        const thanks = row.querySelector(".af-fb-thanks");
+        if (thanks) thanks.style.display = "inline";
+      }
+      return;
+    }
+
+    const chip = e.target.closest(".af-suggestion-chip");
+    if (chip) {
+      const text = chip.getAttribute("data-suggestion");
+      if (text && !isProcessing && botActive) {
+        if (!panel.classList.contains("open")) openPanel();
+        sendMessage(text);
+      }
+    }
+  });
+
   function showConfirmCard(reply, plan) {
     pendingPlan = plan;
     const actions = plan.actions || [];
@@ -2536,6 +2799,7 @@ window.afDownloadFile = function(filename) {
         pageContext,
         history: historyForAI,
         device: deviceInfo,   // ← backend uses deviceInfo.deviceId to scope workspace files
+        userRole: USER_ROLE || undefined,
         // Only images go in the body for the Vision path; docs are already in the workspace
         attachments: imageAttachments.length > 0 ? imageAttachments.map(a => ({
           name: a.name,
@@ -2616,14 +2880,14 @@ window.afDownloadFile = function(filename) {
             } else if (rescued.type === "file_select") {
               showFileSelectCard(rescued.reply, rescued.files || []);
             } else {
-              addMsg("agent", rescued.reply || "Done.");
+              addMsg("agent", renderAgentReply(rescued.reply || "Done.", rescued.suggestions, message));
             }
             if (rescued.type !== "file_select") setInputLocked(false);
             return;
           }
         } catch {}
       }
-      addMsg("agent", replyText || "Done.");
+      addMsg("agent", renderAgentReply(replyText || "Done.", response.suggestions, message));
     } else if (response.type === "file_select") {
       showFileSelectCard(response.reply, response.files || []);
     } else if (response.type === "task") {
@@ -2631,7 +2895,7 @@ window.afDownloadFile = function(filename) {
         response.plan.originalCommand = message;
         showConfirmCard(response.reply, response.plan);
       } else {
-        addMsg("agent", response.reply || "Done.");
+        addMsg("agent", renderAgentReply(response.reply || "Done.", response.suggestions, message));
       }
     } else if (response.type === "file_result") {
       let fileReply = response.reply || "Done.";
@@ -2641,7 +2905,7 @@ window.afDownloadFile = function(filename) {
       } catch {}
       showFileResult(response.steps || [], fileReply, response.downloadables || []);
     } else {
-      addMsg("agent", response.reply || "Done.");
+      addMsg("agent", renderAgentReply(response.reply || "Done.", response.suggestions, message));
     }
 
     // file_select manages its own lock — only unlock for other response types
