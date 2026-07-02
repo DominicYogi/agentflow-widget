@@ -206,6 +206,13 @@
     }
     #af-fullscreen-btn:hover { opacity: 1; }
 
+    #af-explain-page-btn {
+      background: none; border: none; color: white; opacity: 0.85; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 2px;
+    }
+    #af-explain-page-btn:hover { opacity: 1; }
+    #af-explain-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
     #af-header {
       background: ${theme.primary}; color: white; padding: 14px 16px;
       display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
@@ -965,6 +972,13 @@
             <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
           </svg>
         </button>
+        <button id="af-explain-page-btn" type="button" title="Explain this page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="11.5"></line>
+            <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"></circle>
+          </svg>
+        </button>
         <!-- User chip — shown after login -->
         <div id="af-user-chip">
           <div class="af-uc-avatar" id="af-uc-initials"></div>
@@ -1191,6 +1205,22 @@
     fsBtn.addEventListener("click", function (e) {
       e.stopPropagation();
       isFullscreen ? exitFullscreen() : enterFullscreen();
+    });
+  })();
+
+  // ── "Explain This Page" button ────────────────────────
+  // Opens the panel (if closed) and sends a canned request through the
+  // normal sendMessage() pipeline — page context is already attached
+  // automatically, and the backend expands this into a structured
+  // explanation (purpose, sections, fields, actions, mistakes, etc.).
+  (function () {
+    const explainBtn = document.getElementById("af-explain-page-btn");
+    if (!explainBtn) return;
+    explainBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (isProcessing || !botActive) return;
+      if (!panel.classList.contains("open")) openPanel();
+      sendMessage("Explain this page");
     });
   })();
 
