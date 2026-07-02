@@ -175,9 +175,36 @@
       border: 1px solid #e0e0e0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
       animation: af-up 0.22s ease; max-height: calc(100vh - 130px);
+      min-width: 320px; min-height: 380px;
     }
     @keyframes af-up { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
     #af-panel.open { display: flex; }
+    #af-panel.af-resizing { animation: none; user-select: none; }
+
+    /* ── Full screen mode ── */
+    #af-panel.af-fullscreen {
+      top: 16px !important; left: 16px !important; right: 16px !important; bottom: 16px !important;
+      width: auto !important; height: auto !important; max-height: none !important;
+      border-radius: 12px;
+    }
+
+    /* ── Resize handle (top-left corner grip) ── */
+    .af-resize-handle {
+      position: absolute; top: 0; left: 0; width: 18px; height: 18px;
+      cursor: nwse-resize; z-index: 50; touch-action: none;
+    }
+    .af-resize-handle::before {
+      content: ""; position: absolute; top: 6px; left: 6px; width: 7px; height: 7px;
+      border-left: 2px solid rgba(255,255,255,0.65); border-top: 2px solid rgba(255,255,255,0.65);
+      border-radius: 2px 0 0 0;
+    }
+    #af-panel.af-fullscreen .af-resize-handle { display: none; }
+
+    #af-fullscreen-btn {
+      background: none; border: none; color: white; opacity: 0.85; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 2px;
+    }
+    #af-fullscreen-btn:hover { opacity: 1; }
 
     #af-header {
       background: ${theme.primary}; color: white; padding: 14px 16px;
@@ -917,6 +944,9 @@
       </div>
     </div><!-- end #af-auth-screen -->
 
+    <!-- Resize grip — drag to resize the panel; hidden in full screen -->
+    <div class="af-resize-handle" id="af-resize-handle" title="Drag to resize"></div>
+
     <!-- ══ MAIN CHAT PANEL ═══════════════════════════════ -->
     <div id="af-header">
       <div class="af-hinfo">
@@ -927,6 +957,14 @@
         <div style="display:flex;align-items:center;gap:5px;font-size:11px;">
           <div class="af-dot" id="af-status-dot"></div><span id="af-status-label">Live</span>
         </div>
+        <button id="af-fullscreen-btn" type="button" title="Full screen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+            <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+            <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+            <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+          </svg>
+        </button>
         <!-- User chip — shown after login -->
         <div id="af-user-chip">
           <div class="af-uc-avatar" id="af-uc-initials"></div>
@@ -1057,6 +1095,104 @@
     panel.classList.contains("open") ? closePanel() : openPanel();
   }
   launcher.addEventListener("click", togglePanel);
+
+  // ── Resize (drag top-left grip) + Full screen toggle ──
+  // Panel is anchored to bottom/right; dragging the grip grows the panel
+  // up and to the left. Full screen expands to fill the viewport (with
+  // a small margin) and remembers the prior size/position to restore.
+  (function () {
+    const resizeHandle = document.getElementById("af-resize-handle");
+    const fsBtn         = document.getElementById("af-fullscreen-btn");
+    if (!resizeHandle || !fsBtn) return;
+
+    const EXPAND_ICON = fsBtn.innerHTML;
+    const COLLAPSE_ICON = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;">
+        <path d="M8 3v3a2 2 0 0 1-2 2H3"></path>
+        <path d="M21 8h-3a2 2 0 0 1-2-2V3"></path>
+        <path d="M3 16h3a2 2 0 0 1 2 2v3"></path>
+        <path d="M16 21v-3a2 2 0 0 1 2-2h3"></path>
+      </svg>`;
+
+    let resizing = false, startX = 0, startY = 0, startW = 0, startH = 0;
+    let isFullscreen = false;
+    let savedStyle = null; // { width, height, top }
+
+    function clientPos(e) {
+      if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      return { x: e.clientX, y: e.clientY };
+    }
+
+    function startResize(e) {
+      if (isFullscreen) return;
+      const p = clientPos(e);
+      const rect = panel.getBoundingClientRect();
+      resizing = true;
+      startX = p.x; startY = p.y;
+      startW = rect.width; startH = rect.height;
+      // Switch from top+bottom sizing to bottom+explicit-height so height
+      // can be driven directly while the bottom edge stays anchored.
+      panel.style.top    = "auto";
+      panel.style.width  = startW + "px";
+      panel.style.height = startH + "px";
+      panel.classList.add("af-resizing");
+      document.body.style.userSelect = "none";
+      e.preventDefault();
+    }
+
+    function doResize(e) {
+      if (!resizing) return;
+      const p = clientPos(e);
+      const dx = startX - p.x; // dragging left/up (toward top-left) grows the panel
+      const dy = startY - p.y;
+      const maxW = Math.min(window.innerWidth - 40, 900);
+      const maxH = window.innerHeight - 32;
+      const newW = Math.min(Math.max(startW + dx, 320), maxW);
+      const newH = Math.min(Math.max(startH + dy, 380), maxH);
+      panel.style.width  = newW + "px";
+      panel.style.height = newH + "px";
+      e.preventDefault();
+    }
+
+    function stopResize() {
+      if (!resizing) return;
+      resizing = false;
+      panel.classList.remove("af-resizing");
+      document.body.style.userSelect = "";
+    }
+
+    resizeHandle.addEventListener("mousedown", startResize);
+    document.addEventListener("mousemove", doResize);
+    document.addEventListener("mouseup", stopResize);
+    resizeHandle.addEventListener("touchstart", startResize, { passive: false });
+    document.addEventListener("touchmove", doResize, { passive: false });
+    document.addEventListener("touchend", stopResize);
+
+    function enterFullscreen() {
+      savedStyle = { width: panel.style.width, height: panel.style.height, top: panel.style.top };
+      panel.classList.add("af-fullscreen");
+      isFullscreen = true;
+      fsBtn.innerHTML = COLLAPSE_ICON;
+      fsBtn.title = "Exit full screen";
+    }
+
+    function exitFullscreen() {
+      panel.classList.remove("af-fullscreen");
+      if (savedStyle) {
+        panel.style.width  = savedStyle.width;
+        panel.style.height = savedStyle.height;
+        panel.style.top    = savedStyle.top;
+      }
+      isFullscreen = false;
+      fsBtn.innerHTML = EXPAND_ICON;
+      fsBtn.title = "Full screen";
+    }
+
+    fsBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      isFullscreen ? exitFullscreen() : enterFullscreen();
+    });
+  })();
 
   // ════════════════════════════════════════════════════════
   // ── AUTH — JWT storage + screen management ────────────
