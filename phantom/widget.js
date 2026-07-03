@@ -1622,15 +1622,57 @@
   }
 
   // Called after successful login or signup — hand off to init()
-  function onAuthSuccess(token, user, org) {
+  function onAuthSuccess(token, user, org, serverHistory) {
     saveAuth(token, user, org);
     widgetUser  = user;
     widgetOrg   = org;
     widgetToken = token;
     hideAuthScreen();
     setUserChip(user);
+    // Seed the local Conversation History archive with what the server has
+    // for this user (cross-device), without force-overwriting whatever's
+    // currently on screen — it just becomes a resumable entry the user can
+    // open from the History panel.
+    if (Array.isArray(serverHistory) && serverHistory.length) {
+      try {
+        const asWidgetMsgs = serverHistory.map(m => ({
+          type: m.role === "assistant" ? "agent" : "user",
+          html: escHtml(m.content || "")
+        }));
+        const archive = getArchive();
+        const id = "server_" + (user?.id || "sync");
+        const idx = archive.findIndex(c => c.id === id);
+        const entry = {
+          id, title: "Synced from your account", updatedAt: Date.now(),
+          pinned: idx !== -1 ? !!archive[idx].pinned : false, messages: asWidgetMsgs
+        };
+        if (idx !== -1) archive[idx] = entry; else archive.unshift(entry);
+        setArchive(archive);
+      } catch {}
+    }
     // Update the Authorization header going forward
     init();
+  }
+
+  // ── Sync new turns to server-side history (cross-device) ─────────────────
+  // Fire-and-forget, only when logged in (widgetToken set). Tracks how much
+  // of conversationHistory has already been pushed so we don't resend turns.
+  let _historySyncedLen = 0;
+  async function syncHistoryToServer() {
+    if (!widgetToken) return;
+    const fresh = conversationHistory.slice(_historySyncedLen)
+      .filter(m => m.type === "user" || m.type === "agent")
+      .map(m => ({ role: m.type === "agent" ? "assistant" : "user", content: (m.html || "").replace(/<[^>]+>/g, "").trim() }))
+      .filter(t => t.content);
+    if (!fresh.length) return;
+    _historySyncedLen = conversationHistory.length;
+    try {
+      await fetch(BACKEND_URL + "/api/user/history", {
+        method: "POST",
+        headers: { ...authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ turns: fresh })
+      });
+    } catch { /* best-effort — local archive still has it */ }
   }
 
   // ── Navigation between auth forms ─────────────────────
@@ -1667,7 +1709,7 @@
       try { data = JSON.parse(text); }
       catch { throw new Error(res.status === 404 ? "Auth routes not found on server — please redeploy the backend with the latest code." : `Server error (${res.status}). Please try again.`); }
       if (!data.success) throw new Error(data.error || "Login failed.");
-      onAuthSuccess(data.token, data.user, data.org);
+      onAuthSuccess(data.token, data.user, data.org, data.history);
     } catch (err) {
       showAuthError("login", err.message);
       btn.disabled = false;
@@ -1704,7 +1746,7 @@
       catch { throw new Error(res.status === 404 ? "Auth routes not found — please redeploy the backend." : `Server error (${res.status}).`); }
       if (!data.success) throw new Error(data.error || "Signup failed.");
       showAuthSuccess("signup");
-      setTimeout(() => onAuthSuccess(data.token, data.user, data.org), 1200);
+      setTimeout(() => onAuthSuccess(data.token, data.user, data.org, data.history), 1200);
     } catch (err) {
       showAuthError("signup", err.message);
       btn.disabled = false;
@@ -1778,6 +1820,7 @@
       }));
     } catch (e) {}
     archiveCurrentSession();
+    syncHistoryToServer();
   }
   function loadSession() {
     try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; }
@@ -2481,6 +2524,10 @@ window.afDownloadFile = function(filename) {
         let el = action.afId ? document.querySelector('[data-af-id="' + action.afId + '"]') : null;
         if (!el && action.elementId) el = document.getElementById(action.elementId);
         if (!el && action.selector)  el = document.querySelector(action.selector);
+        // Task Engine templates (deterministic, zero-LLM) describe targets by
+        // visible text rather than a live afId — reuse the same text-search
+        // the Guided Walkthrough uses to resolve those.
+        if (!el && action.elementHint) el = findByHint(action.elementHint);
 
         if (!el && !["navigate","scroll","click_by_text"].includes(action.type)) {
           ok  = false;
